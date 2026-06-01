@@ -1,7 +1,7 @@
 import React from 'react';
 import {Text} from 'react-native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
-import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
+import {createMaterialTopTabNavigator} from '@react-navigation/material-top-tabs';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../theme/colors';
 import FilaScreen from '../screens/despachante/FilaScreen';
@@ -15,7 +15,7 @@ export type DespachanteStackParamList = {
 };
 
 const Stack = createNativeStackNavigator<DespachanteStackParamList>();
-const Tab   = createBottomTabNavigator();
+const Tab = createMaterialTopTabNavigator();
 
 const icon: Record<string, string> = {
   Fila: '📋', 'Em Andamento': '🔄', Histórico: '✅',
@@ -26,11 +26,13 @@ function Tabs() {
 
   return (
     <Tab.Navigator
+      id="despachanteTab"
+      tabBarPosition="bottom"
       screenOptions={({route}) => ({
-        headerShown: false,
         tabBarIcon: ({focused}) => (
           <Text style={{fontSize: focused ? 22 : 18}}>{icon[route.name]}</Text>
         ),
+        tabBarShowIcon: true,
         tabBarActiveTintColor: Colors.pulso,
         tabBarInactiveTintColor: '#4B6070',
         tabBarStyle: {
@@ -39,21 +41,21 @@ function Tabs() {
           borderTopWidth: 1,
           height: 60 + insets.bottom,
           paddingBottom: insets.bottom + 4,
-          paddingTop: 6,
         },
-        tabBarLabelStyle: {fontSize: 11, fontWeight: '600'},
+        tabBarLabelStyle: {fontSize: 11, fontWeight: '600', textTransform: 'none'},
+        tabBarIndicatorStyle: {backgroundColor: Colors.pulso, top: 0},
       })}>
-      <Tab.Screen name="Fila"         component={FilaScreen} />
+      <Tab.Screen name="Fila" component={FilaScreen} />
       <Tab.Screen name="Em Andamento" component={EmAndamentoScreen} />
-      <Tab.Screen name="Histórico"    component={HistoricoScreen} />
+      <Tab.Screen name="Histórico" component={HistoricoScreen} />
     </Tab.Navigator>
   );
 }
 
 export default function DespachanteNavigator() {
   return (
-    <Stack.Navigator screenOptions={{headerShown: false}}>
-      <Stack.Screen name="Tabs"     component={Tabs} />
+    <Stack.Navigator id="despachanteStack" screenOptions={{headerShown: false}}>
+      <Stack.Screen name="Tabs" component={Tabs} />
       <Stack.Screen
         name="Checklist"
         component={ChecklistScreen}

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); print\\(json.dumps\\(data.get\\('exports', {}\\), indent=2\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); print\\(json.dumps\\({'peerDependencies': data.get\\('peerDependencies',{}\\), 'peerDependenciesMeta': data.get\\('peerDependenciesMeta',{}\\)}, indent=2\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('types:', d.get\\('types'\\), 'typings:', d.get\\('typings'\\), 'main:', d.get\\('main'\\)\\)\")",
+      "Bash(xargs -I{} basename {} .d.ts)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d['version']\\)\")"
+    ]
+  }
+}
