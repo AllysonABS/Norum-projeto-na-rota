@@ -5,78 +5,95 @@ import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
 import Toast, {useToast} from '../../components/Toast';
+import {useAuth} from '../../context/AuthContext';
+import {atualizarCliente} from '../../services/api';
+
+function maskCpf(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  return digits
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+}
 
 export default function PerfilScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {showToast} = useToast();
+  const {cliente, setCliente} = useAuth();
   const [modalEditar, setModalEditar] = useState(false);
-
-  // Dados do perfil
-  const [nome, setNome] = useState('João da Silva');
-  const [cpf] = useState('123.456.789-00');
-  const [telefone, setTelefone] = useState('(11) 98888-7777');
-  const [email, setEmail] = useState('joao@email.com');
-  const [dataNascimento, setDataNascimento] = useState('15/03/1990');
-  const [cep, setCep] = useState('01310-100');
-  const [rua, setRua] = useState('Av. Paulista');
-  const [numero, setNumero] = useState('1000');
-  const [bairro, setBairro] = useState('Bela Vista');
-  const [cidade, setCidade] = useState('São Paulo');
-  const [estado, setEstado] = useState('SP');
 
   // Form temporário para edição
   const [formNome, setFormNome] = useState('');
   const [formTelefone, setFormTelefone] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formNascimento, setFormNascimento] = useState('');
-  const [formCep, setFormCep] = useState('');
-  const [formRua, setFormRua] = useState('');
-  const [formNumero, setFormNumero] = useState('');
-  const [formBairro, setFormBairro] = useState('');
+  const [formEndereco, setFormEndereco] = useState('');
   const [formCidade, setFormCidade] = useState('');
   const [formEstado, setFormEstado] = useState('');
+  const [formCep, setFormCep] = useState('');
+
+  const nome = cliente?.nome || '';
+  const cpf = cliente?.cpf || '';
+  const telefone = cliente?.telefone || '';
+  const email = cliente?.email || '';
+  const dataNascimento = cliente?.data_nascimento || '';
+  const endereco = cliente?.endereco || '';
+  const cidade = cliente?.cidade || '';
+  const estado = cliente?.estado || '';
+  const cep = cliente?.cep || '';
+
+  const enderecoCompleto = endereco && cidade ? `${endereco} - ${cidade}/${estado}` : 'Não informado';
 
   const abrirEditar = () => {
     setFormNome(nome); setFormTelefone(telefone); setFormEmail(email);
-    setFormNascimento(dataNascimento); setFormCep(cep); setFormRua(rua);
-    setFormNumero(numero); setFormBairro(bairro); setFormCidade(cidade); setFormEstado(estado);
+    setFormNascimento(dataNascimento); setFormEndereco(endereco);
+    setFormCidade(cidade); setFormEstado(estado); setFormCep(cep);
     setModalEditar(true);
   };
 
-  const salvar = () => {
+  const salvar = async () => {
     if (!formNome || !formTelefone) { Alert.alert('Preencha nome e telefone'); return; }
-    setNome(formNome); setTelefone(formTelefone); setEmail(formEmail);
-    setDataNascimento(formNascimento); setCep(formCep); setRua(formRua);
-    setNumero(formNumero); setBairro(formBairro); setCidade(formCidade); setEstado(formEstado);
-    setModalEditar(false);
-    showToast('Perfil atualizado!', 'success');
-  };
+    if (!cliente?.id) return;
 
-  const endereco = rua && cidade ? `${rua}, ${numero} - ${bairro}, ${cidade}/${estado}` : 'Não informado';
+    const res = await atualizarCliente(cliente.id, {
+      nome: formNome, telefone: formTelefone, email: formEmail,
+      data_nascimento: formNascimento, endereco: formEndereco,
+      cidade: formCidade, estado: formEstado, cep: formCep,
+    });
+
+    if (res.success) {
+      setCliente({...cliente, nome: formNome, telefone: formTelefone, email: formEmail,
+        data_nascimento: formNascimento, endereco: formEndereco,
+        cidade: formCidade, estado: formEstado, cep: formCep});
+      setModalEditar(false);
+      showToast('Perfil atualizado!', 'success');
+    } else {
+      Alert.alert('Erro', res.error || 'Não foi possível salvar.');
+    }
+  };
 
   return (
     <View style={s.wrapper}>
       <Toast />
       <ScrollView style={s.container} contentContainerStyle={s.content}>
-        {/* Avatar e nome */}
         <View style={s.avatarWrap}>
-          <View style={s.avatar}><Text style={s.avatarText}>{nome[0]}</Text></View>
-          <Text style={s.nome}>{nome}</Text>
-          <Text style={s.cpf}>{cpf}</Text>
+          <View style={s.avatar}><Text style={s.avatarText}>{nome ? nome[0].toUpperCase() : '?'}</Text></View>
+          <Text style={s.nome}>{nome || 'Cliente'}</Text>
+          <Text style={s.cpf}>{cpf ? maskCpf(cpf) : ''}</Text>
         </View>
 
         {/* Resumo de atividade */}
         <View style={s.resumoRow}>
           <View style={s.resumoCard}>
-            <Text style={s.resumoValor}>17</Text>
+            <Text style={s.resumoValor}>0</Text>
             <Text style={s.resumoLabel}>Pedidos</Text>
           </View>
           <View style={s.resumoCard}>
-            <Text style={s.resumoValor}>2</Text>
+            <Text style={s.resumoValor}>0</Text>
             <Text style={s.resumoLabel}>Lojas</Text>
           </View>
           <View style={s.resumoCard}>
-            <Text style={s.resumoValor}>Jan/24</Text>
+            <Text style={s.resumoValor}>—</Text>
             <Text style={s.resumoLabel}>Cliente desde</Text>
           </View>
         </View>
@@ -89,16 +106,16 @@ export default function PerfilScreen() {
               <Text style={s.editBtn}>✏️ Editar</Text>
             </TouchableOpacity>
           </View>
-          <View style={s.row}><Text style={s.rowLabel}>Telefone</Text><Text style={s.rowValue}>{telefone}</Text></View>
-          <View style={s.row}><Text style={s.rowLabel}>E-mail</Text><Text style={s.rowValue}>{email}</Text></View>
-          <View style={s.row}><Text style={s.rowLabel}>Nascimento</Text><Text style={s.rowValue}>{dataNascimento}</Text></View>
+          <View style={s.row}><Text style={s.rowLabel}>Telefone</Text><Text style={s.rowValue}>{telefone || '—'}</Text></View>
+          <View style={s.row}><Text style={s.rowLabel}>E-mail</Text><Text style={s.rowValue}>{email || '—'}</Text></View>
+          <View style={s.row}><Text style={s.rowLabel}>Nascimento</Text><Text style={s.rowValue}>{dataNascimento || '—'}</Text></View>
         </View>
 
         {/* Endereço */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>Endereço</Text>
           <View style={s.row}><Text style={s.rowLabel}>CEP</Text><Text style={s.rowValue}>{cep || '—'}</Text></View>
-          <View style={[s.row, {borderBottomWidth: 0}]}><Text style={s.rowLabel}>Endereço</Text><Text style={s.rowValue}>{endereco}</Text></View>
+          <View style={[s.row, {borderBottomWidth: 0}]}><Text style={s.rowLabel}>Endereço</Text><Text style={s.rowValue}>{enderecoCompleto}</Text></View>
         </View>
 
         {/* Opções */}
@@ -114,7 +131,7 @@ export default function PerfilScreen() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={s.exitBtn} onPress={() => navigation.replace('RoleSelect')}>
+        <TouchableOpacity style={s.exitBtn} onPress={() => { setCliente(null); navigation.replace('Login'); }}>
           <Text style={s.exitText}>Sair da conta</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -138,18 +155,8 @@ export default function PerfilScreen() {
               <Text style={s.labelSection}>Endereço</Text>
               <Text style={s.label}>CEP</Text>
               <TextInput style={s.input} value={formCep} onChangeText={setFormCep} placeholderTextColor={Colors.gray} keyboardType="numeric" />
-              <Text style={s.label}>Rua</Text>
-              <TextInput style={s.input} value={formRua} onChangeText={setFormRua} placeholderTextColor={Colors.gray} />
-              <View style={s.formRow}>
-                <View style={{flex: 1}}>
-                  <Text style={s.label}>Número</Text>
-                  <TextInput style={s.input} value={formNumero} onChangeText={setFormNumero} placeholderTextColor={Colors.gray} keyboardType="numeric" />
-                </View>
-                <View style={{flex: 2, marginLeft: 12}}>
-                  <Text style={s.label}>Bairro</Text>
-                  <TextInput style={s.input} value={formBairro} onChangeText={setFormBairro} placeholderTextColor={Colors.gray} />
-                </View>
-              </View>
+              <Text style={s.label}>Endereço</Text>
+              <TextInput style={s.input} value={formEndereco} onChangeText={setFormEndereco} placeholderTextColor={Colors.gray} />
               <View style={s.formRow}>
                 <View style={{flex: 2}}>
                   <Text style={s.label}>Cidade</Text>

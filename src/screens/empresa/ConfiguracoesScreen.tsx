@@ -1,23 +1,87 @@
-import React, {useState} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Alert} from 'react-native';
+import React, {useState, useEffect} from 'react';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import Toast, {useToast} from '../../components/Toast';
+import {useAuth} from '../../context/AuthContext';
+import {buscarEmpresa, atualizarEmpresa} from '../../services/api';
+
+function maskCnpj(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 14);
+  return digits
+    .replace(/(\d{2})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1/$2')
+    .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+}
 
 export default function ConfiguracoesScreen() {
   const navigation = useNavigation();
   const {showToast} = useToast();
-  const [nomeEmpresa, setNomeEmpresa] = useState('Na Rota Transportes');
-  const [cnpj, setCnpj] = useState('12.345.678/0001-90');
-  const [telefone, setTelefone] = useState('(11) 3333-4444');
-  const [email, setEmail] = useState('contato@narota.com.br');
-  const [endereco, setEndereco] = useState('Rua das Cargas, 100 - São Paulo/SP');
-  const [horario, setHorario] = useState('Seg-Sex: 07:00 - 18:00 | Sáb: 07:00 - 12:00');
+  const {empresa, setEmpresa} = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [salvando, setSalvando] = useState(false);
 
-  const salvar = () => {
-    if (!nomeEmpresa || !cnpj) { Alert.alert('Preencha os campos obrigatórios'); return; }
-    showToast('Configurações salvas!', 'success');
+  const [nomeEmpresa, setNomeEmpresa] = useState('');
+  const [cnpj, setCnpj] = useState('');
+  const [nomeResponsavel, setNomeResponsavel] = useState('');
+  const [telefone, setTelefone] = useState('');
+  const [email, setEmail] = useState('');
+  const [endereco, setEndereco] = useState('');
+  const [cidade, setCidade] = useState('');
+  const [estado, setEstado] = useState('');
+  const [cep, setCep] = useState('');
+  const [horario, setHorario] = useState('');
+
+  useEffect(() => {
+    carregarDados();
+  }, []);
+
+  const carregarDados = async () => {
+    if (!empresa?.id) { setLoading(false); return; }
+    setLoading(true);
+    const res = await buscarEmpresa(empresa.id);
+    if (res.success && res.empresa) {
+      const e = res.empresa;
+      setNomeEmpresa(e.nome_empresa || '');
+      setCnpj(e.cnpj || '');
+      setNomeResponsavel(e.nome_responsavel || '');
+      setTelefone(e.telefone || '');
+      setEmail(e.email || '');
+      setEndereco(e.endereco || '');
+      setCidade(e.cidade || '');
+      setEstado(e.estado || '');
+      setCep(e.cep || '');
+      setHorario(e.horario_funcionamento || '');
+    }
+    setLoading(false);
   };
+
+  const salvar = async () => {
+    if (!nomeEmpresa) { Alert.alert('Preencha o nome da empresa'); return; }
+    if (!empresa?.id) return;
+
+    setSalvando(true);
+    const res = await atualizarEmpresa(empresa.id, {
+      nome_empresa: nomeEmpresa, telefone, email, endereco, cidade, estado, cep, horario_funcionamento: horario,
+    });
+    setSalvando(false);
+
+    if (res.success) {
+      setEmpresa({...empresa, nome_empresa: nomeEmpresa, telefone, email, endereco, cidade, estado, cep, horario_funcionamento: horario});
+      showToast('Configurações salvas!', 'success');
+    } else {
+      Alert.alert('Erro', res.error || 'Não foi possível salvar.');
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={[s.container, {justifyContent: 'center', alignItems: 'center'}]}>
+        <ActivityIndicator size="large" color={Colors.pulso} />
+      </View>
+    );
+  }
 
   return (
     <View style={s.container}>
@@ -32,20 +96,46 @@ export default function ConfiguracoesScreen() {
           <Text style={s.sectionTitle}>Dados da Empresa</Text>
           <Text style={s.label}>Nome / Razão Social *</Text>
           <TextInput style={s.input} value={nomeEmpresa} onChangeText={setNomeEmpresa} placeholderTextColor={Colors.gray} />
-          <Text style={s.label}>CNPJ *</Text>
-          <TextInput style={s.input} value={cnpj} onChangeText={setCnpj} placeholderTextColor={Colors.gray} keyboardType="numeric" />
+          <Text style={s.label}>CNPJ</Text>
+          <TextInput style={[s.input, s.inputDisabled]} value={maskCnpj(cnpj)} editable={false} />
+          <Text style={s.label}>Responsável</Text>
+          <TextInput style={[s.input, s.inputDisabled]} value={nomeResponsavel} editable={false} />
           <Text style={s.label}>Telefone</Text>
           <TextInput style={s.input} value={telefone} onChangeText={setTelefone} placeholderTextColor={Colors.gray} keyboardType="phone-pad" />
           <Text style={s.label}>E-mail</Text>
           <TextInput style={s.input} value={email} onChangeText={setEmail} placeholderTextColor={Colors.gray} keyboardType="email-address" autoCapitalize="none" />
-          <Text style={s.label}>Endereço</Text>
-          <TextInput style={s.input} value={endereco} onChangeText={setEndereco} placeholderTextColor={Colors.gray} />
-          <Text style={s.label}>Horário de Funcionamento</Text>
-          <TextInput style={s.input} value={horario} onChangeText={setHorario} placeholderTextColor={Colors.gray} />
         </View>
 
-        <TouchableOpacity style={s.saveBtn} onPress={salvar}>
-          <Text style={s.saveBtnText}>Salvar Alterações</Text>
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Endereço</Text>
+          <Text style={s.label}>CEP</Text>
+          <TextInput style={s.input} value={cep} onChangeText={setCep} placeholderTextColor={Colors.gray} keyboardType="numeric" placeholder="00000-000" />
+          <Text style={s.label}>Endereço</Text>
+          <TextInput style={s.input} value={endereco} onChangeText={setEndereco} placeholderTextColor={Colors.gray} placeholder="Rua, número" />
+          <View style={s.row}>
+            <View style={{flex: 2}}>
+              <Text style={s.label}>Cidade</Text>
+              <TextInput style={s.input} value={cidade} onChangeText={setCidade} placeholderTextColor={Colors.gray} />
+            </View>
+            <View style={{flex: 1, marginLeft: 12}}>
+              <Text style={s.label}>UF</Text>
+              <TextInput style={s.input} value={estado} onChangeText={setEstado} placeholderTextColor={Colors.gray} maxLength={2} autoCapitalize="characters" />
+            </View>
+          </View>
+        </View>
+
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Funcionamento</Text>
+          <Text style={s.label}>Horário de Funcionamento</Text>
+          <TextInput style={s.input} value={horario} onChangeText={setHorario} placeholderTextColor={Colors.gray} placeholder="Ex: Seg-Sex: 07:00-18:00 | Sáb: 07:00-12:00" />
+        </View>
+
+        <TouchableOpacity style={s.saveBtn} onPress={salvar} disabled={salvando}>
+          {salvando ? (
+            <ActivityIndicator color={Colors.matriz} />
+          ) : (
+            <Text style={s.saveBtnText}>Salvar Alterações</Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -61,6 +151,8 @@ const s = StyleSheet.create({
   sectionTitle: {fontSize: 15, fontWeight: '700', color: Colors.pulso, marginBottom: 8},
   label:        {fontSize: 13, fontWeight: '600', color: Colors.gray, marginBottom: 6, marginTop: 14},
   input:        {height: 48, backgroundColor: '#0F1F2E', borderRadius: 8, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 14, color: Colors.clareza, fontSize: 15},
+  inputDisabled:{opacity: 0.5},
+  row:          {flexDirection: 'row'},
   saveBtn:      {height: 52, backgroundColor: Colors.pulso, borderRadius: 8, alignItems: 'center', justifyContent: 'center'},
   saveBtnText:  {color: Colors.matriz, fontWeight: '700', fontSize: 16},
 });

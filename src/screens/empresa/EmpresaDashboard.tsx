@@ -74,7 +74,7 @@ export default function EmpresaDashboard() {
           <Text style={s.greeting}>{getGreeting()}</Text>
           <Text style={s.company}>Na Rota Transportes</Text>
         </View>
-        <TouchableOpacity style={s.exitBtn} onPress={() => navigation.replace('RoleSelect')}>
+        <TouchableOpacity style={s.exitBtn} onPress={() => navigation.replace('Login')}>
           <Text style={s.exitText}>Sair</Text>
         </TouchableOpacity>
       </View>

@@ -7,6 +7,7 @@ import {Colors} from '../theme/colors';
 import PedidosScreen from '../screens/cliente/PedidosScreen';
 import EmpresasScreen from '../screens/cliente/EmpresasScreen';
 import EmpresaDetailScreen from '../screens/cliente/EmpresaDetailScreen';
+import BuscarLojasScreen from '../screens/cliente/BuscarLojasScreen';
 import PerfilScreen from '../screens/cliente/PerfilScreen';
 
 const Tab = createMaterialTopTabNavigator();
@@ -17,12 +18,13 @@ function EmpresasStackNavigator() {
     <EmpresasStack.Navigator id="clienteEmpresasStack" screenOptions={{headerShown: false}}>
       <EmpresasStack.Screen name="EmpresasList" component={EmpresasScreen} />
       <EmpresasStack.Screen name="EmpresaDetail" component={EmpresaDetailScreen} />
+      <EmpresasStack.Screen name="BuscarLojas" component={BuscarLojasScreen} />
     </EmpresasStack.Navigator>
   );
 }
 
 const icon: Record<string, string> = {
-  Pedidos: '📦', Empresas: '🏢', Perfil: '👤',
+  Pedidos: '📦', Lojas: '🏢', Perfil: '👤',
 };
 
 export default function ClienteNavigator() {
@@ -50,7 +52,7 @@ export default function ClienteNavigator() {
         tabBarIndicatorStyle: {backgroundColor: Colors.pulso, top: 0},
       })}>
       <Tab.Screen name="Pedidos" component={PedidosScreen} />
-      <Tab.Screen name="Empresas" component={EmpresasStackNavigator} />
+      <Tab.Screen name="Lojas" component={EmpresasStackNavigator} />
       <Tab.Screen name="Perfil" component={PerfilScreen} />
     </Tab.Navigator>
   );

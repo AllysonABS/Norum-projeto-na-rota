@@ -1,25 +1,45 @@
-import React, {useState, useEffect, useCallback} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator} from 'react-native';
-import {useFocusEffect} from '@react-navigation/native';
+import React, {useState, useEffect} from 'react';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert} from 'react-native';
+import {useNavigation} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import {useAuth} from '../../context/AuthContext';
-import {listarMinhasLojas, LojaData} from '../../services/api';
+import {listarTodasLojas, vincularLoja, listarMinhasLojas, LojaData} from '../../services/api';
 
-export default function EmpresasScreen({navigation}: any) {
+export default function BuscarLojasScreen() {
+  const navigation = useNavigation();
   const {cliente} = useAuth();
   const [busca, setBusca] = useState('');
   const [lojas, setLojas] = useState<LojaData[]>([]);
+  const [vinculadas, setVinculadas] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [vinculando, setVinculando] = useState<string | null>(null);
+
+  useEffect(() => { carregar(); }, []);
 
   const carregar = async () => {
     if (!cliente?.id) return;
     setLoading(true);
-    const res = await listarMinhasLojas(cliente.id);
-    if (res.success && res.lojas) setLojas(res.lojas);
+    const [resTodas, resMinhas] = await Promise.all([
+      listarTodasLojas(),
+      listarMinhasLojas(cliente.id),
+    ]);
+    if (resTodas.success && resTodas.lojas) setLojas(resTodas.lojas);
+    if (resMinhas.success && resMinhas.lojas) setVinculadas(resMinhas.lojas.map(l => l.id));
     setLoading(false);
   };
 
-  useFocusEffect(useCallback(() => { carregar(); }, [cliente?.id]));
+  const handleVincular = async (empresaId: string) => {
+    if (!cliente?.id) return;
+    setVinculando(empresaId);
+    const res = await vincularLoja(cliente.id, empresaId);
+    setVinculando(null);
+    if (res.success) {
+      setVinculadas([...vinculadas, empresaId]);
+      Alert.alert('Sucesso', 'Você foi vinculado a esta loja!');
+    } else {
+      Alert.alert('Erro', res.error || 'Não foi possível vincular.');
+    }
+  };
 
   const filtradas = lojas.filter(e => {
     const q = busca.toLowerCase();
@@ -31,39 +51,31 @@ export default function EmpresasScreen({navigation}: any) {
   return (
     <View style={s.container}>
       <View style={s.header}>
-        <View style={s.headerRow}>
-          <View>
-            <Text style={s.title}>Minhas Lojas</Text>
-            <Text style={s.sub}>Toque para ver detalhes e pedidos</Text>
-          </View>
-          <TouchableOpacity style={s.buscarBtn} onPress={() => navigation.navigate('BuscarLojas')}>
-            <Text style={s.buscarBtnText}>+ Buscar</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={s.backText}>← Voltar</Text>
+        </TouchableOpacity>
+        <Text style={s.title}>Buscar Lojas</Text>
+        <Text style={s.sub}>Encontre e vincule-se a lojas disponíveis</Text>
       </View>
 
       <View style={s.searchBox}>
         <Text style={s.searchIcon}>🔍</Text>
-        <TextInput style={s.searchInput} placeholder="Buscar loja..." placeholderTextColor={Colors.gray} value={busca} onChangeText={setBusca} />
+        <TextInput style={s.searchInput} placeholder="Buscar por nome ou cidade..." placeholderTextColor={Colors.gray} value={busca} onChangeText={setBusca} />
       </View>
 
       {loading ? (
         <View style={s.center}><ActivityIndicator size="large" color={Colors.pulso} /></View>
       ) : filtradas.length === 0 ? (
         <View style={s.center}>
-          <Text style={s.emptyText}>Nenhuma loja vinculada</Text>
-          <Text style={s.emptySubText}>Toque em "+ Buscar" para encontrar lojas</Text>
+          <Text style={s.emptyText}>Nenhuma loja encontrada</Text>
         </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.list}>
           {filtradas.map((e, i) => {
             const cor = cores[i % cores.length];
+            const jaVinculada = vinculadas.includes(e.id);
             return (
-              <TouchableOpacity
-                key={e.id}
-                style={s.card}
-                activeOpacity={0.85}
-                onPress={() => navigation.navigate('EmpresaDetail', {empresa: e})}>
+              <View key={e.id} style={s.card}>
                 <View style={[s.accent, {backgroundColor: cor}]} />
                 <View style={s.cardContent}>
                   <View style={s.cardTop}>
@@ -73,18 +85,23 @@ export default function EmpresasScreen({navigation}: any) {
                     <View style={s.cardInfo}>
                       <Text style={s.nome}>{e.nome_empresa}</Text>
                       <Text style={s.cidade}>📍 {e.cidade && e.estado ? `${e.cidade}, ${e.estado}` : 'Localização não informada'}</Text>
-                    </View>
-                    <View style={s.arrow}>
-                      <Text style={s.arrowText}>›</Text>
+                      {e.horario_funcionamento ? <Text style={s.horario}>🕐 {e.horario_funcionamento}</Text> : null}
                     </View>
                   </View>
-                  {e.horario_funcionamento ? (
-                    <View style={s.cardBottom}>
-                      <Text style={s.horarioText}>🕐 {e.horario_funcionamento}</Text>
-                    </View>
-                  ) : null}
+                  <TouchableOpacity
+                    style={[s.vincularBtn, jaVinculada && s.vincularBtnDisabled]}
+                    onPress={() => !jaVinculada && handleVincular(e.id)}
+                    disabled={jaVinculada || vinculando === e.id}>
+                    {vinculando === e.id ? (
+                      <ActivityIndicator color={Colors.matriz} size="small" />
+                    ) : (
+                      <Text style={[s.vincularBtnText, jaVinculada && s.vincularBtnTextDisabled]}>
+                        {jaVinculada ? '✓ Vinculado' : 'Vincular'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
+              </View>
             );
           })}
         </ScrollView>
@@ -96,11 +113,9 @@ export default function EmpresasScreen({navigation}: any) {
 const s = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.matriz},
   header: {padding: 24, paddingTop: 56, paddingBottom: 12},
-  headerRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
+  backText: {color: Colors.pulso, fontSize: 14, fontWeight: '600', marginBottom: 12},
   title: {fontSize: 24, fontWeight: '800', color: Colors.clareza},
   sub: {fontSize: 13, color: Colors.gray, marginTop: 4},
-  buscarBtn: {backgroundColor: Colors.pulso, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8},
-  buscarBtnText: {color: Colors.matriz, fontWeight: '700', fontSize: 13},
   searchBox: {flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 14, backgroundColor: '#162433', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 14},
   searchIcon: {fontSize: 16, marginRight: 8},
   searchInput: {flex: 1, height: 44, color: Colors.clareza, fontSize: 15},
@@ -114,11 +129,11 @@ const s = StyleSheet.create({
   cardInfo: {flex: 1},
   nome: {fontSize: 17, fontWeight: '700', color: Colors.clareza},
   cidade: {fontSize: 12, color: Colors.gray, marginTop: 3},
-  arrow: {width: 32, height: 32, borderRadius: 10, backgroundColor: '#1E3448', alignItems: 'center', justifyContent: 'center'},
-  arrowText: {fontSize: 20, color: Colors.clareza, fontWeight: '300', marginTop: -2},
-  cardBottom: {marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#1E3448'},
-  horarioText: {fontSize: 13, color: Colors.gray},
+  horario: {fontSize: 11, color: Colors.gray, marginTop: 2},
+  vincularBtn: {marginTop: 14, height: 42, backgroundColor: Colors.pulso, borderRadius: 8, alignItems: 'center', justifyContent: 'center'},
+  vincularBtnDisabled: {backgroundColor: '#1E3448'},
+  vincularBtnText: {color: Colors.matriz, fontWeight: '700', fontSize: 14},
+  vincularBtnTextDisabled: {color: Colors.gray},
   center: {flex: 1, alignItems: 'center', justifyContent: 'center'},
   emptyText: {fontSize: 16, color: Colors.clareza, fontWeight: '600'},
-  emptySubText: {fontSize: 13, color: Colors.gray, marginTop: 6},
 });

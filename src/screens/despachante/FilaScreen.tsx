@@ -48,7 +48,7 @@ export default function FilaScreen() {
           <Text style={s.title}>Fila de Expedição</Text>
           <View style={s.badge}><Text style={s.badgeText}>{pedidos.length}</Text></View>
         </View>
-        <TouchableOpacity style={s.exitBtn} onPress={() => rootNavigation.replace('RoleSelect')}>
+        <TouchableOpacity style={s.exitBtn} onPress={() => rootNavigation.replace('Login')}>
           <Text style={s.exitText}>Sair</Text>
         </TouchableOpacity>
       </View>

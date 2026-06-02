@@ -14,6 +14,10 @@ const pedidosMock = [
 
 export default function EmpresaDetailScreen({route, navigation}: any) {
   const {empresa} = route.params;
+  const nome = empresa.nome_empresa || empresa.nome || '';
+  const cor = empresa.cor || Colors.pulso;
+  const cidadeEstado = empresa.cidade && empresa.estado ? `${empresa.cidade}, ${empresa.estado}` : empresa.cidade || 'Não informado';
+  const horario = empresa.horario_funcionamento || empresa.horario || '';
   const [selecionado, setSelecionado] = useState<typeof pedidosMock[0] | null>(null);
 
   const stats = [
@@ -24,13 +28,13 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
   ];
 
   const ligar = () => {
-    const num = empresa.telefone.replace(/\D/g, '');
-    Linking.openURL(`tel:${num}`);
+    const num = (empresa.telefone || '').replace(/\D/g, '');
+    if (num) Linking.openURL(`tel:${num}`);
   };
 
   const whatsapp = () => {
-    const num = '55' + empresa.telefone.replace(/\D/g, '');
-    Linking.openURL(`https://wa.me/${num}`);
+    const num = '55' + (empresa.telefone || '').replace(/\D/g, '');
+    if (num.length > 2) Linking.openURL(`https://wa.me/${num}`);
   };
 
   return (
@@ -44,20 +48,22 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
 
         {/* Hero */}
         <View style={s.hero}>
-          <View style={[s.avatar, {backgroundColor: empresa.cor + '22'}]}>
-            <Text style={[s.avatarText, {color: empresa.cor}]}>{empresa.nome[0]}</Text>
+          <View style={[s.avatar, {backgroundColor: cor + '22'}]}>
+            <Text style={[s.avatarText, {color: cor}]}>{nome[0]}</Text>
           </View>
-          <Text style={s.nome}>{empresa.nome}</Text>
-          <Text style={s.cnpj}>{empresa.cnpj}</Text>
+          <Text style={s.nome}>{nome}</Text>
+          <Text style={s.cnpj}>{empresa.cnpj || ''}</Text>
           <View style={s.infoPills}>
             <View style={s.pill}>
               <Text style={s.pillIcon}>📍</Text>
-              <Text style={s.pillText}>{empresa.cidade}</Text>
+              <Text style={s.pillText}>{cidadeEstado}</Text>
             </View>
-            <View style={s.pill}>
-              <Text style={s.pillIcon}>🕐</Text>
-              <Text style={s.pillText}>{empresa.horario || 'Seg-Sex'}</Text>
-            </View>
+            {horario ? (
+              <View style={s.pill}>
+                <Text style={s.pillIcon}>🕐</Text>
+                <Text style={s.pillText}>{horario}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -111,7 +117,7 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
             <View style={s.sheetHeader}>
               <View>
                 <Text style={s.sheetId}>{selecionado?.id}</Text>
-                <Text style={s.sheetSub}>{empresa.nome} · {selecionado?.excursao}</Text>
+                <Text style={s.sheetSub}>{nome} · {selecionado?.excursao}</Text>
               </View>
               {selecionado && <StatusBadge status={selecionado.status} />}
             </View>

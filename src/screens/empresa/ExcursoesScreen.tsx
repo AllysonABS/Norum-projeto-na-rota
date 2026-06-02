@@ -1,31 +1,21 @@
 import React, {useState, useCallback} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Alert, RefreshControl} from 'react-native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Alert, RefreshControl, ActivityIndicator} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
+import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import Toast, {useToast} from '../../components/Toast';
-
-type Excursao = {
-  id: string;
-  nome: string;
-  setor: string;
-  vaga: string;
-  responsavel: string;
-  telefone: string;
-};
-
-const inicial: Excursao[] = [
-  {id: '1', nome: 'Trans Silva - SP',    setor: 'A', vaga: '12', responsavel: 'Carlos Motorista', telefone: '(11) 99999-1111'},
-  {id: '2', nome: 'Rápido Norte - RJ',   setor: 'B', vaga: '07', responsavel: 'Marcos Silva',     telefone: '(21) 98888-2222'},
-  {id: '3', nome: 'Sul Cargas - BH',     setor: 'A', vaga: '23', responsavel: 'Pedro Oliveira',   telefone: '(31) 97777-3333'},
-];
+import {useAuth} from '../../context/AuthContext';
+import {listarExcursoes, cadastrarExcursao, atualizarExcursao, excluirExcursao, ExcursaoData} from '../../services/api';
 
 export default function ExcursoesScreen() {
   const navigation = useNavigation();
-  const [lista, setLista] = useState<Excursao[]>(inicial);
+  const {empresa} = useAuth();
+  const [lista, setLista] = useState<ExcursaoData[]>([]);
+  const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
   const [modal, setModal] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
-  const [detalhe, setDetalhe] = useState<Excursao | null>(null);
+  const [detalhe, setDetalhe] = useState<ExcursaoData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const {showToast} = useToast();
   const [nome, setNome] = useState('');
@@ -34,45 +24,64 @@ export default function ExcursoesScreen() {
   const [responsavel, setResponsavel] = useState('');
   const [telefone, setTelefone] = useState('');
 
+  const carregar = async () => {
+    if (!empresa?.id) return;
+    const res = await listarExcursoes(empresa.id);
+    if (res.success && res.excursoes) setLista(res.excursoes);
+  };
+
+  useFocusEffect(useCallback(() => {
+    setLoading(true);
+    carregar().finally(() => setLoading(false));
+  }, [empresa?.id]));
+
   const limpar = () => {
     setNome(''); setSetor(''); setVaga(''); setResponsavel(''); setTelefone(''); setEditandoId(null);
   };
 
-  const abrirEditar = (e: Excursao) => {
+  const abrirEditar = (e: ExcursaoData) => {
     setEditandoId(e.id); setNome(e.nome); setSetor(e.setor); setVaga(e.vaga);
-    setResponsavel(e.responsavel); setTelefone(e.telefone); setModal(true);
+    setResponsavel(e.responsavel); setTelefone(e.telefone || ''); setModal(true);
   };
 
   const excluir = (id: string) => {
     Alert.alert('Excluir excursão', 'Tem certeza que deseja excluir?', [
       {text: 'Cancelar', style: 'cancel'},
-      {text: 'Excluir', style: 'destructive', onPress: () => {
-        setLista(prev => prev.filter(e => e.id !== id));
-        showToast('Excursão excluída', 'error');
+      {text: 'Excluir', style: 'destructive', onPress: async () => {
+        const res = await excluirExcursao(id);
+        if (res.success) { showToast('Excursão excluída', 'error'); carregar(); }
+        else Alert.alert('Erro', res.error || 'Falha ao excluir.');
       }},
     ]);
   };
 
-  const salvar = () => {
+  const salvar = async () => {
     if (!nome || !setor || !vaga || !responsavel) {
       Alert.alert('Atenção', 'Preencha todos os campos obrigatórios.');
       return;
     }
+    if (!empresa?.id) return;
     const dados = {nome, setor, vaga, responsavel, telefone};
     if (editandoId) {
-      setLista(prev => prev.map(e => e.id === editandoId ? {...e, ...dados} : e));
-      showToast('Excursão atualizada!', 'success');
+      const res = await atualizarExcursao(editandoId, dados);
+      if (res.success) { showToast('Excursão atualizada!', 'success'); carregar(); }
+      else Alert.alert('Erro', res.error || 'Falha ao atualizar.');
     } else {
-      setLista(prev => [...prev, {id: Date.now().toString(), ...dados}]);
-      showToast('Excursão cadastrada!', 'success');
+      const res = await cadastrarExcursao(empresa.id, dados);
+      if (res.success) { showToast('Excursão cadastrada!', 'success'); carregar(); }
+      else Alert.alert('Erro', res.error || 'Falha ao cadastrar.');
     }
     limpar(); setModal(false);
   };
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
-  }, []);
+    carregar().finally(() => setRefreshing(false));
+  }, [empresa?.id]);
+
+  if (loading) {
+    return <View style={[s.container, {justifyContent: 'center', alignItems: 'center'}]}><ActivityIndicator size="large" color={Colors.pulso} /></View>;
+  }
 
   return (
     <View style={s.container}>

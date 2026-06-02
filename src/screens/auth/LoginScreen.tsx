@@ -9,11 +9,14 @@ import {
   Platform,
   ActivityIndicator,
   StatusBar,
+  Alert,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
+import {loginEmpresa, loginCliente, loginDespachante} from '../../services/api';
+import {useAuth} from '../../context/AuthContext';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Login'>;
@@ -77,16 +80,43 @@ export default function LoginScreen({navigation}: Props) {
   const [cpfCnpj, setCpfCnpj] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const {setEmpresa, setCliente, setDespachante} = useAuth();
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!cpfCnpj || !password) {
+      Alert.alert('Atenção', 'Preencha CPF/CNPJ e senha.');
       return;
     }
     setLoading(true);
-    setTimeout(() => {
+    const cnpjLimpo = cpfCnpj.replace(/\D/g, '');
+
+    // Tenta login como empresa primeiro
+    const resEmpresa = await loginEmpresa(cnpjLimpo, password);
+    if (resEmpresa.success && resEmpresa.empresa) {
+      setEmpresa(resEmpresa.empresa);
       setLoading(false);
-      navigation.replace('RoleSelect');
-    }, 800);
+      navigation.replace('Empresa');
+      return;
+    }
+
+    // Tenta login como despachante
+    const resDesp = await loginDespachante(cnpjLimpo, password);
+    if (resDesp.success && resDesp.despachante) {
+      setDespachante(resDesp.despachante);
+      setLoading(false);
+      navigation.replace('Despachante');
+      return;
+    }
+
+    // Tenta login como cliente
+    const resCliente = await loginCliente(cnpjLimpo, password);
+    setLoading(false);
+    if (resCliente.success && resCliente.cliente) {
+      setCliente(resCliente.cliente);
+      navigation.replace('Cliente');
+    } else {
+      Alert.alert('Erro', resCliente.error || 'Credenciais inválidas.');
+    }
   };
 
   return (
@@ -149,7 +179,7 @@ export default function LoginScreen({navigation}: Props) {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Não tem uma conta? </Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('CadastroCliente')}>
             <Text style={styles.footerLink}>Cadastre-se</Text>
           </TouchableOpacity>
         </View>

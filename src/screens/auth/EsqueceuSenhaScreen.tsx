@@ -5,6 +5,21 @@ import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
 
+function maskCpfCnpj(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 14);
+  if (digits.length <= 11) {
+    return digits
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  }
+  return digits
+    .replace(/(\d{2})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1/$2')
+    .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+}
+
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'EsqueceuSenha'>;
 };
@@ -65,7 +80,7 @@ export default function EsqueceuSenhaScreen({navigation}: Props) {
           {etapa === 'email' && (
             <>
               <Text style={s.label}>CPF / CNPJ</Text>
-              <TextInput style={s.input} placeholder="000.000.000-00" placeholderTextColor={Colors.gray} value={cpfCnpj} onChangeText={setCpfCnpj} keyboardType="numeric" />
+              <TextInput style={s.input} placeholder="000.000.000-00" placeholderTextColor={Colors.gray} value={cpfCnpj} onChangeText={v => setCpfCnpj(maskCpfCnpj(v))} keyboardType="numeric" />
               <TouchableOpacity style={[s.btn, loading && s.btnDisabled]} onPress={enviarCodigo} disabled={loading} activeOpacity={0.85}>
                 {loading ? <ActivityIndicator color={Colors.matriz} /> : <Text style={s.btnText}>Enviar código</Text>}
               </TouchableOpacity>

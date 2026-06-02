@@ -1,0 +1,601 @@
+import express from 'express';
+import cors from 'cors';
+import { Pool } from 'pg';
+import bcrypt from 'bcryptjs';
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const pool = new Pool({
+  host: '76.13.70.131',
+  port: 5434,
+  user: 'postgres',
+  password: 'May@19091993',
+  database: 'na_rota',
+  ssl: false,
+});
+
+// Cadastro de empresa
+app.post('/api/cadastro', async (req, res) => {
+  try {
+    const { nome_empresa, cnpj, nome_responsavel, email, telefone, senha, endereco, cidade, estado, cep } = req.body;
+
+    // Validações
+    if (!nome_empresa || !cnpj || !nome_responsavel || !email || !telefone || !senha) {
+      return res.status(400).json({ error: 'Campos obrigatórios não preenchidos.' });
+    }
+
+    // Verificar duplicidade
+    const existe = await pool.query('SELECT id FROM empresas WHERE email = $1 OR cnpj = $2', [email, cnpj]);
+    if (existe.rows.length > 0) {
+      return res.status(409).json({ error: 'E-mail ou CNPJ já cadastrado.' });
+    }
+
+    // Hash da senha
+    const senha_hash = await bcrypt.hash(senha, 10);
+
+    // Calcular vencimento (30 dias)
+    const data_vencimento = new Date();
+    data_vencimento.setDate(data_vencimento.getDate() + 30);
+
+    // Inserir empresa
+    const result = await pool.query(
+      `INSERT INTO empresas (nome_empresa, cnpj, nome_responsavel, email, telefone, senha_hash, endereco, cidade, estado, cep, data_vencimento)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id, email`,
+      [nome_empresa, cnpj, nome_responsavel, email, telefone, senha_hash, endereco, cidade, estado, cep, data_vencimento]
+    );
+
+    const empresaId = result.rows[0].id;
+
+    // Criar assinatura
+    await pool.query(
+      `INSERT INTO assinaturas (empresa_id, data_vencimento) VALUES ($1, $2)`,
+      [empresaId, data_vencimento]
+    );
+
+    res.status(201).json({ success: true, empresa_id: empresaId });
+  } catch (err: any) {
+    console.error('Erro no cadastro:', err);
+    res.status(500).json({ error: 'Erro interno do servidor.' });
+  }
+});
+
+// Login (para o app mobile usar)
+app.post('/api/login', async (req, res) => {
+  try {
+    const { cnpj, senha } = req.body;
+    if (!cnpj || !senha) {
+      return res.status(400).json({ error: 'CPF/CNPJ e senha são obrigatórios.' });
+    }
+
+    const result = await pool.query('SELECT * FROM empresas WHERE cnpj = $1 AND ativa = true', [cnpj]);
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Credenciais inválidas.' });
+    }
+
+    const empresa = result.rows[0];
+    const senhaValida = await bcrypt.compare(senha, empresa.senha_hash);
+    if (!senhaValida) {
+      return res.status(401).json({ error: 'Credenciais inválidas.' });
+    }
+
+    // Verificar assinatura
+    if (empresa.status_assinatura !== 'ativa') {
+      return res.status(403).json({ error: 'Assinatura inativa.' });
+    }
+
+    res.json({
+      success: true,
+      empresa: {
+        id: empresa.id,
+        nome_empresa: empresa.nome_empresa,
+        cnpj: empresa.cnpj,
+        nome_responsavel: empresa.nome_responsavel,
+        email: empresa.email,
+        telefone: empresa.telefone,
+        endereco: empresa.endereco || '',
+        cidade: empresa.cidade || '',
+        estado: empresa.estado || '',
+        cep: empresa.cep || '',
+        status_assinatura: empresa.status_assinatura,
+      },
+    });
+  } catch (err: any) {
+    console.error('Erro no login:', err);
+    res.status(500).json({ error: 'Erro interno do servidor.' });
+  }
+});
+
+const PORT = 3001;
+
+// Buscar dados da empresa
+app.get('/api/empresa/:id', async (req, res) => {
+  try {
+    const {id} = req.params;
+    const result = await pool.query(
+      'SELECT id, nome_empresa, cnpj, nome_responsavel, email, telefone, endereco, cidade, estado, cep, horario_funcionamento, status_assinatura FROM empresas WHERE id = $1',
+      [id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({error: 'Empresa n\u00e3o encontrada.'});
+    }
+    res.json({success: true, empresa: result.rows[0]});
+  } catch (err: any) {
+    console.error('Erro ao buscar empresa:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Atualizar dados da empresa
+app.put('/api/empresa/:id', async (req, res) => {
+  try {
+    const {id} = req.params;
+    const {nome_empresa, telefone, email, endereco, cidade, estado, cep, horario_funcionamento} = req.body;
+    await pool.query(
+      `UPDATE empresas SET nome_empresa=$1, telefone=$2, email=$3, endereco=$4, cidade=$5, estado=$6, cep=$7, horario_funcionamento=$8 WHERE id=$9`,
+      [nome_empresa, telefone, email, endereco, cidade, estado, cep, horario_funcionamento, id]
+    );
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao atualizar empresa:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Atualizar dados do cliente
+app.put('/api/cliente/:id', async (req, res) => {
+  try {
+    const {id} = req.params;
+    const {nome, telefone, email, data_nascimento, endereco, cidade, estado, cep} = req.body;
+    await pool.query(
+      `UPDATE clientes SET nome=$1, telefone=$2, email=$3, data_nascimento=$4, endereco=$5, cidade=$6, estado=$7, cep=$8 WHERE id=$9`,
+      [nome, telefone, email, data_nascimento || null, endereco || null, cidade || null, estado || null, cep || null, id]
+    );
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao atualizar cliente:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Listar todas as lojas (para cliente buscar)
+app.get('/api/lojas', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, nome_empresa, cidade, estado, horario_funcionamento FROM empresas WHERE ativa = true ORDER BY nome_empresa'
+    );
+    res.json({success: true, lojas: result.rows});
+  } catch (err: any) {
+    console.error('Erro ao listar lojas:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Listar lojas vinculadas ao cliente
+app.get('/api/cliente/:id/lojas', async (req, res) => {
+  try {
+    const {id} = req.params;
+    const result = await pool.query(
+      `SELECT e.id, e.nome_empresa, e.cidade, e.estado, e.horario_funcionamento, ce.data_vinculo
+       FROM cliente_empresa ce JOIN empresas e ON e.id = ce.empresa_id
+       WHERE ce.cliente_id = $1 AND ce.status = 'ativo' ORDER BY ce.data_vinculo DESC`, [id]
+    );
+    res.json({success: true, lojas: result.rows});
+  } catch (err: any) {
+    console.error('Erro ao listar lojas do cliente:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Empresa cadastra cliente manualmente (vinculo sem conta no app)
+app.post('/api/empresa/:empresaId/cadastrar-cliente', async (req, res) => {
+  try {
+    const {empresaId} = req.params;
+    const {nome, cpf, cnpj, rg, telefone, email, data_nascimento, cep, endereco, cidade, estado, observacoes} = req.body;
+    if (!nome || (!cpf && !cnpj)) {
+      return res.status(400).json({error: 'Preencha o nome e pelo menos CPF ou CNPJ.'});
+    }
+    if (cpf) {
+      const existe = await pool.query('SELECT id FROM cliente_empresa WHERE empresa_id=$1 AND cpf=$2', [empresaId, cpf]);
+      if (existe.rows.length > 0) return res.status(409).json({error: 'Já existe um cliente com este CPF vinculado.'});
+    }
+    if (cnpj) {
+      const existe = await pool.query('SELECT id FROM cliente_empresa WHERE empresa_id=$1 AND cnpj=$2', [empresaId, cnpj]);
+      if (existe.rows.length > 0) return res.status(409).json({error: 'Já existe um cliente com este CNPJ vinculado.'});
+    }
+    let clienteId = null;
+    if (cpf) {
+      const c = await pool.query('SELECT id FROM clientes WHERE cpf=$1', [cpf]);
+      if (c.rows.length > 0) clienteId = c.rows[0].id;
+    }
+    if (!clienteId && cnpj) {
+      const c = await pool.query('SELECT id FROM clientes WHERE cnpj=$1', [cnpj]);
+      if (c.rows.length > 0) clienteId = c.rows[0].id;
+    }
+    await pool.query(
+      `INSERT INTO cliente_empresa (cliente_id, empresa_id, nome, cpf, cnpj, rg, telefone, email, data_nascimento, cep, endereco, cidade, estado, observacoes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      [clienteId, empresaId, nome, cpf || null, cnpj || null, rg || null, telefone || null, email || null, data_nascimento || null, cep || null, endereco || null, cidade || null, estado || null, observacoes || null]
+    );
+    res.status(201).json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao cadastrar cliente manual:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Vincular cliente a loja
+app.post('/api/cliente/:clienteId/vincular/:empresaId', async (req, res) => {
+  try {
+    const {clienteId, empresaId} = req.params;
+    // Busca CPF e CNPJ do cliente
+    const clienteRes = await pool.query('SELECT cpf, cnpj FROM clientes WHERE id=$1', [clienteId]);
+    if (clienteRes.rows.length === 0) return res.status(404).json({error: 'Cliente não encontrado.'});
+    const {cpf, cnpj} = clienteRes.rows[0];
+    // Verifica bloqueio por cliente_id, CPF ou CNPJ
+    const bloqueado = await pool.query(
+      `SELECT id FROM cliente_empresa WHERE empresa_id=$1 AND status='bloqueado'
+       AND (cliente_id=$2 OR ($3::text IS NOT NULL AND cpf=$3) OR ($4::text IS NOT NULL AND cnpj=$4))`,
+      [empresaId, clienteId, cpf, cnpj]
+    );
+    if (bloqueado.rows.length > 0) {
+      return res.status(403).json({error: 'Você foi bloqueado por esta loja.'});
+    }
+    // Verifica se ja existe vinculo manual (sem cliente_id) com mesmo CPF ou CNPJ
+    let vinculoExistente = null;
+    if (cpf) {
+      const v = await pool.query('SELECT id FROM cliente_empresa WHERE empresa_id=$1 AND cpf=$2 AND cliente_id IS NULL', [empresaId, cpf]);
+      if (v.rows.length > 0) vinculoExistente = v.rows[0].id;
+    }
+    if (!vinculoExistente && cnpj) {
+      const v = await pool.query('SELECT id FROM cliente_empresa WHERE empresa_id=$1 AND cnpj=$2 AND cliente_id IS NULL', [empresaId, cnpj]);
+      if (v.rows.length > 0) vinculoExistente = v.rows[0].id;
+    }
+    if (vinculoExistente) {
+      await pool.query('UPDATE cliente_empresa SET cliente_id=$1 WHERE id=$2', [clienteId, vinculoExistente]);
+    } else {
+      const direto = await pool.query('SELECT id FROM cliente_empresa WHERE cliente_id=$1 AND empresa_id=$2', [clienteId, empresaId]);
+      if (direto.rows.length === 0) {
+        await pool.query('INSERT INTO cliente_empresa (cliente_id, empresa_id) VALUES ($1, $2)', [clienteId, empresaId]);
+      }
+    }
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao vincular:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Desvincular cliente de loja
+app.delete('/api/cliente/:clienteId/desvincular/:empresaId', async (req, res) => {
+  try {
+    const {clienteId, empresaId} = req.params;
+    await pool.query(
+      'DELETE FROM cliente_empresa WHERE cliente_id = $1 AND empresa_id = $2',
+      [clienteId, empresaId]
+    );
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao desvincular:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Listar clientes vinculados a uma empresa
+app.get('/api/empresa/:id/clientes', async (req, res) => {
+  try {
+    const {id} = req.params;
+    const result = await pool.query(
+      `SELECT ce.id as vinculo_id, ce.status, ce.nome, ce.cpf, ce.cnpj, ce.rg, ce.telefone, ce.email,
+              ce.data_nascimento, ce.cep, ce.endereco, ce.cidade, ce.estado, ce.observacoes, ce.data_vinculo,
+              c.id as cliente_id, c.nome as cliente_nome, c.cpf as cliente_cpf, c.email as cliente_email, c.telefone as cliente_telefone
+       FROM cliente_empresa ce JOIN clientes c ON c.id = ce.cliente_id
+       WHERE ce.empresa_id = $1 ORDER BY ce.data_vinculo DESC`, [id]
+    );
+    const clientes = result.rows.map(r => ({
+      vinculo_id: r.vinculo_id, cliente_id: r.cliente_id, status: r.status,
+      nome: r.nome || r.cliente_nome,
+      cpf: r.cpf || r.cliente_cpf,
+      cnpj: r.cnpj || '',
+      rg: r.rg || '',
+      telefone: r.telefone || r.cliente_telefone,
+      email: r.email || r.cliente_email,
+      data_nascimento: r.data_nascimento || '',
+      cep: r.cep || '', endereco: r.endereco || '',
+      cidade: r.cidade || '', estado: r.estado || '',
+      observacoes: r.observacoes || '', data_vinculo: r.data_vinculo,
+    }));
+    res.json({success: true, clientes});
+  } catch (err: any) {
+    console.error('Erro ao listar clientes da empresa:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Atualizar dados do cliente (visão lojista - salva no vínculo)
+app.put('/api/empresa/vinculo/:vinculoId', async (req, res) => {
+  try {
+    const {vinculoId} = req.params;
+    const {nome, cpf, cnpj, rg, telefone, email, data_nascimento, cep, endereco, cidade, estado, observacoes} = req.body;
+    await pool.query(
+      `UPDATE cliente_empresa SET nome=$1, cpf=$2, cnpj=$3, rg=$4, telefone=$5, email=$6,
+       data_nascimento=$7, cep=$8, endereco=$9, cidade=$10, estado=$11, observacoes=$12 WHERE id=$13`,
+      [nome, cpf, cnpj, rg, telefone, email, data_nascimento, cep, endereco, cidade, estado, observacoes, vinculoId]
+    );
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao atualizar vinculo:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Bloquear cliente (não pode se vincular novamente)
+app.put('/api/empresa/vinculo/:vinculoId/bloquear', async (req, res) => {
+  try {
+    const {vinculoId} = req.params;
+    await pool.query('UPDATE cliente_empresa SET status=$1 WHERE id=$2', ['bloqueado', vinculoId]);
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao bloquear:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Excluir vinculo (cliente pode se vincular novamente)
+app.delete('/api/empresa/vinculo/:vinculoId', async (req, res) => {
+  try {
+    const {vinculoId} = req.params;
+    await pool.query('DELETE FROM cliente_empresa WHERE id=$1', [vinculoId]);
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao excluir vinculo:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// === DESPACHANTES ===
+
+// Listar despachantes da empresa
+app.get('/api/empresa/:id/despachantes', async (req, res) => {
+  try {
+    const {id} = req.params;
+    const result = await pool.query(
+      `SELECT d.id, d.nome, d.cpf, d.telefone, de.ativo
+       FROM despachante_empresa de JOIN despachantes d ON d.id = de.despachante_id
+       WHERE de.empresa_id=$1 ORDER BY de.data_vinculo DESC`, [id]
+    );
+    res.json({success: true, despachantes: result.rows});
+  } catch (err: any) {
+    console.error('Erro ao listar despachantes:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Cadastrar despachante (cria conta + vincula à empresa)
+app.post('/api/empresa/:id/despachantes', async (req, res) => {
+  try {
+    const {id} = req.params;
+    const {nome, cpf, telefone, senha} = req.body;
+    if (!nome || !cpf || !senha) {
+      return res.status(400).json({error: 'Preencha nome, CPF e senha.'});
+    }
+    const cpfLimpo = cpf.replace(/\D/g, '');
+    // Verifica se já existe despachante com esse CPF
+    let despachanteId: string;
+    const existe = await pool.query('SELECT id FROM despachantes WHERE cpf=$1', [cpfLimpo]);
+    if (existe.rows.length > 0) {
+      despachanteId = existe.rows[0].id;
+      // Verifica se já está vinculado a esta empresa
+      const vinculo = await pool.query('SELECT id FROM despachante_empresa WHERE despachante_id=$1 AND empresa_id=$2', [despachanteId, id]);
+      if (vinculo.rows.length > 0) return res.status(409).json({error: 'Este despachante j\u00e1 est\u00e1 vinculado a sua empresa.'});
+    } else {
+      // Cria conta do despachante
+      const senha_hash = await bcrypt.hash(senha, 10);
+      const result = await pool.query(
+        'INSERT INTO despachantes (nome, cpf, telefone, senha_hash) VALUES ($1,$2,$3,$4) RETURNING id',
+        [nome, cpfLimpo, telefone || null, senha_hash]
+      );
+      despachanteId = result.rows[0].id;
+    }
+    // Cria vínculo
+    await pool.query('INSERT INTO despachante_empresa (despachante_id, empresa_id) VALUES ($1,$2)', [despachanteId, id]);
+    res.status(201).json({success: true, id: despachanteId});
+  } catch (err: any) {
+    console.error('Erro ao cadastrar despachante:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Atualizar despachante
+app.put('/api/despachantes/:despachanteId', async (req, res) => {
+  try {
+    const {despachanteId} = req.params;
+    const {nome, cpf, telefone, senha} = req.body;
+    const cpfLimpo = cpf ? cpf.replace(/\D/g, '') : '';
+    if (senha) {
+      const senha_hash = await bcrypt.hash(senha, 10);
+      await pool.query('UPDATE despachantes SET nome=$1, cpf=$2, telefone=$3, senha_hash=$4 WHERE id=$5', [nome, cpfLimpo, telefone || null, senha_hash, despachanteId]);
+    } else {
+      await pool.query('UPDATE despachantes SET nome=$1, cpf=$2, telefone=$3 WHERE id=$4', [nome, cpfLimpo, telefone || null, despachanteId]);
+    }
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao atualizar despachante:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Ativar/Desativar despachante (no vínculo com a empresa)
+app.put('/api/empresa/:empresaId/despachantes/:despachanteId/toggle', async (req, res) => {
+  try {
+    const {empresaId, despachanteId} = req.params;
+    await pool.query('UPDATE despachante_empresa SET ativo = NOT ativo WHERE despachante_id=$1 AND empresa_id=$2', [despachanteId, empresaId]);
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao toggle despachante:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Excluir vínculo do despachante com a empresa
+app.delete('/api/empresa/:empresaId/despachantes/:despachanteId', async (req, res) => {
+  try {
+    const {empresaId, despachanteId} = req.params;
+    await pool.query('DELETE FROM despachante_empresa WHERE despachante_id=$1 AND empresa_id=$2', [despachanteId, empresaId]);
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao excluir despachante:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Login despachante
+app.post('/api/login-despachante', async (req, res) => {
+  try {
+    const {cpf, senha} = req.body;
+    if (!cpf || !senha) return res.status(400).json({error: 'CPF e senha s\u00e3o obrigat\u00f3rios.'});
+    const result = await pool.query('SELECT * FROM despachantes WHERE cpf=$1', [cpf]);
+    if (result.rows.length === 0) return res.status(401).json({error: 'Credenciais inv\u00e1lidas.'});
+    const desp = result.rows[0];
+    const senhaValida = await bcrypt.compare(senha, desp.senha_hash);
+    if (!senhaValida) return res.status(401).json({error: 'Credenciais inv\u00e1lidas.'});
+    // Busca empresas vinculadas (ativas)
+    const empresas = await pool.query(
+      `SELECT e.id, e.nome_empresa FROM despachante_empresa de JOIN empresas e ON e.id = de.empresa_id
+       WHERE de.despachante_id=$1 AND de.ativo=true`, [desp.id]
+    );
+    if (empresas.rows.length === 0) return res.status(403).json({error: 'Nenhuma empresa ativa vinculada.'});
+    res.json({
+      success: true,
+      despachante: {
+        id: desp.id, nome: desp.nome, cpf: desp.cpf, telefone: desp.telefone || '',
+        empresas: empresas.rows,
+      },
+    });
+  } catch (err: any) {
+    console.error('Erro no login despachante:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// === EXCURSÕES ===
+
+// Listar excursões da empresa
+app.get('/api/empresa/:id/excursoes', async (req, res) => {
+  try {
+    const {id} = req.params;
+    const result = await pool.query(
+      'SELECT id, nome, setor, vaga, responsavel, telefone FROM excursoes WHERE empresa_id=$1 ORDER BY data_cadastro DESC', [id]
+    );
+    res.json({success: true, excursoes: result.rows});
+  } catch (err: any) {
+    console.error('Erro ao listar excursões:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Cadastrar excursão
+app.post('/api/empresa/:id/excursoes', async (req, res) => {
+  try {
+    const {id} = req.params;
+    const {nome, setor, vaga, responsavel, telefone} = req.body;
+    if (!nome || !setor || !vaga || !responsavel) {
+      return res.status(400).json({error: 'Preencha todos os campos obrigatórios.'});
+    }
+    const result = await pool.query(
+      'INSERT INTO excursoes (empresa_id, nome, setor, vaga, responsavel, telefone) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+      [id, nome, setor, vaga, responsavel, telefone || null]
+    );
+    res.status(201).json({success: true, id: result.rows[0].id});
+  } catch (err: any) {
+    console.error('Erro ao cadastrar excursão:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Atualizar excursão
+app.put('/api/excursoes/:excursaoId', async (req, res) => {
+  try {
+    const {excursaoId} = req.params;
+    const {nome, setor, vaga, responsavel, telefone} = req.body;
+    await pool.query(
+      'UPDATE excursoes SET nome=$1, setor=$2, vaga=$3, responsavel=$4, telefone=$5 WHERE id=$6',
+      [nome, setor, vaga, responsavel, telefone || null, excursaoId]
+    );
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao atualizar excursão:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Excluir excursão
+app.delete('/api/excursoes/:excursaoId', async (req, res) => {
+  try {
+    const {excursaoId} = req.params;
+    await pool.query('DELETE FROM excursoes WHERE id=$1', [excursaoId]);
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao excluir excursão:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Cadastro de cliente
+app.post('/api/cadastro-cliente', async (req, res) => {
+  try {
+    const {nome, cpf, cnpj, email, telefone, data_nascimento, endereco, cidade, estado, cep, senha} = req.body;
+    if (!nome || !cpf || !email || !telefone || !senha) {
+      return res.status(400).json({error: 'Campos obrigatórios não preenchidos.'});
+    }
+    const existe = await pool.query('SELECT id FROM clientes WHERE cpf = $1 OR email = $2', [cpf, email]);
+    if (existe.rows.length > 0) {
+      return res.status(409).json({error: 'CPF ou e-mail já cadastrado.'});
+    }
+    const senha_hash = await bcrypt.hash(senha, 10);
+    const result = await pool.query(
+      `INSERT INTO clientes (nome, cpf, cnpj, email, telefone, data_nascimento, endereco, cidade, estado, cep, senha_hash)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+      [nome, cpf, cnpj || null, email, telefone, data_nascimento || null, endereco || null, cidade || null, estado || null, cep || null, senha_hash]
+    );
+    res.status(201).json({success: true, cliente_id: result.rows[0].id});
+  } catch (err: any) {
+    console.error('Erro no cadastro cliente:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Login de cliente
+app.post('/api/login-cliente', async (req, res) => {
+  try {
+    const {cpf, senha} = req.body;
+    if (!cpf || !senha) {
+      return res.status(400).json({error: 'CPF e senha são obrigatórios.'});
+    }
+    const result = await pool.query('SELECT * FROM clientes WHERE cpf = $1 AND ativo = true', [cpf]);
+    if (result.rows.length === 0) {
+      return res.status(401).json({error: 'Credenciais inválidas.'});
+    }
+    const cliente = result.rows[0];
+    const senhaValida = await bcrypt.compare(senha, cliente.senha_hash);
+    if (!senhaValida) {
+      return res.status(401).json({error: 'Credenciais inválidas.'});
+    }
+    res.json({
+      success: true,
+      cliente: {
+        id: cliente.id, nome: cliente.nome, cpf: cliente.cpf, cnpj: cliente.cnpj || '',
+        email: cliente.email, telefone: cliente.telefone, data_nascimento: cliente.data_nascimento || '',
+        endereco: cliente.endereco || '', cidade: cliente.cidade || '', estado: cliente.estado || '', cep: cliente.cep || '',
+      },
+    });
+  } catch (err: any) {
+    console.error('Erro no login cliente:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`API rodando em http://0.0.0.0:${PORT}`);
+});
