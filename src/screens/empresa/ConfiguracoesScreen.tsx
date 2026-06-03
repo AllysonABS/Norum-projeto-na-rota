@@ -1,10 +1,11 @@
 import React, {useState, useEffect} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator} from 'react-native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import Toast, {useToast} from '../../components/Toast';
 import {useAuth} from '../../context/AuthContext';
 import {buscarEmpresa, atualizarEmpresa} from '../../services/api';
+import {useAlert} from '../../components/CustomAlert';
 
 function maskCnpj(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 14);
@@ -19,6 +20,7 @@ export default function ConfiguracoesScreen() {
   const navigation = useNavigation();
   const {showToast} = useToast();
   const {empresa, setEmpresa} = useAuth();
+  const {show} = useAlert();
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
 
@@ -58,7 +60,7 @@ export default function ConfiguracoesScreen() {
   };
 
   const salvar = async () => {
-    if (!nomeEmpresa) { Alert.alert('Preencha o nome da empresa'); return; }
+    if (!nomeEmpresa) { show({title: 'Atenção', message: 'Preencha o nome da empresa', type: 'warning'}); return; }
     if (!empresa?.id) return;
 
     setSalvando(true);
@@ -71,7 +73,7 @@ export default function ConfiguracoesScreen() {
       setEmpresa({...empresa, nome_empresa: nomeEmpresa, telefone, email, endereco, cidade, estado, cep, horario_funcionamento: horario});
       showToast('Configurações salvas!', 'success');
     } else {
-      Alert.alert('Erro', res.error || 'Não foi possível salvar.');
+      show({title: 'Erro', message: res.error || 'Não foi possível salvar.', type: 'error'});
     }
   };
 

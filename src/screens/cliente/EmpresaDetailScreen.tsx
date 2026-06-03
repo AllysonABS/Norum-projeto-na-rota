@@ -2,6 +2,8 @@ import React, {useState} from 'react';
 import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Linking} from 'react-native';
 import {Colors} from '../../theme/colors';
 import StatusBadge from '../../components/StatusBadge';
+import {useAuth} from '../../context/AuthContext';
+import {desvincularLoja} from '../../services/api';
 
 type Status = 'aguardando' | 'em_transito' | 'entregue' | 'cancelado';
 
@@ -14,11 +16,13 @@ const pedidosMock = [
 
 export default function EmpresaDetailScreen({route, navigation}: any) {
   const {empresa} = route.params;
+  const {cliente} = useAuth();
   const nome = empresa.nome_empresa || empresa.nome || '';
   const cor = empresa.cor || Colors.pulso;
   const cidadeEstado = empresa.cidade && empresa.estado ? `${empresa.cidade}, ${empresa.estado}` : empresa.cidade || 'Não informado';
   const horario = empresa.horario_funcionamento || empresa.horario || '';
   const [selecionado, setSelecionado] = useState<typeof pedidosMock[0] | null>(null);
+  const [modalDesvincular, setModalDesvincular] = useState(false);
 
   const stats = [
     {label: 'Total', value: pedidosMock.length, color: Colors.clareza},
@@ -35,6 +39,19 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
   const whatsapp = () => {
     const num = '55' + (empresa.telefone || '').replace(/\D/g, '');
     if (num.length > 2) Linking.openURL(`https://wa.me/${num}`);
+  };
+
+  const handleDesvincular = () => {
+    setModalDesvincular(true);
+  };
+
+  const confirmarDesvincular = async () => {
+    if (!cliente?.id) return;
+    const res = await desvincularLoja(cliente.id, empresa.id);
+    setModalDesvincular(false);
+    if (res.success) {
+      navigation.goBack();
+    }
   };
 
   return (
@@ -107,7 +124,35 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
             ))}
           </View>
         </View>
+
+        {/* Botão desvincular */}
+        <View style={s.section}>
+          <TouchableOpacity style={s.desvincularBtn} onPress={handleDesvincular}>
+            <Text style={s.desvincularText}>Desvincular desta loja</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
+
+      {/* Modal desvincular */}
+      <Modal visible={modalDesvincular} transparent animationType="fade">
+        <View style={s.overlayCenter}>
+          <View style={s.confirmSheet}>
+            <View style={s.confirmIconWrap}>
+              <Text style={s.confirmIcon}>⚠️</Text>
+            </View>
+            <Text style={s.confirmTitle}>Desvincular</Text>
+            <Text style={s.confirmMsg}>Tem certeza que deseja se desvincular de <Text style={{fontWeight: '700'}}>{nome}</Text>?</Text>
+            <View style={s.confirmBtns}>
+              <TouchableOpacity style={s.confirmCancelBtn} onPress={() => setModalDesvincular(false)}>
+                <Text style={s.confirmCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.confirmDangerBtn} onPress={confirmarDesvincular}>
+                <Text style={s.confirmDangerText}>Desvincular</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal detalhe pedido */}
       <Modal visible={!!selecionado} transparent animationType="slide">
@@ -183,6 +228,7 @@ const s = StyleSheet.create({
   pedidoExcursao: {fontSize: 12, color: '#60A5FA', marginTop: 4},
 
   overlay: {flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end'},
+  overlayCenter: {flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center'},
   sheet: {backgroundColor: '#0F1F2E', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: 40},
   sheetHandle: {width: 40, height: 4, backgroundColor: '#1E3448', borderRadius: 2, alignSelf: 'center', marginBottom: 20},
   sheetHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24},
@@ -198,4 +244,16 @@ const s = StyleSheet.create({
   timelineEvento: {fontSize: 14, color: Colors.clareza, fontWeight: '500'},
   closeBtn: {height: 52, backgroundColor: '#162433', borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 12, borderWidth: 1, borderColor: '#1E3448'},
   closeBtnText: {color: Colors.clareza, fontWeight: '600', fontSize: 15},
+  desvincularBtn: {height: 52, backgroundColor: '#162433', borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#EF4444'},
+  desvincularText: {color: '#EF4444', fontWeight: '700', fontSize: 15},
+  confirmSheet: {backgroundColor: '#0F1F2E', borderRadius: 20, padding: 28, marginHorizontal: 32, alignItems: 'center'},
+  confirmIconWrap: {width: 64, height: 64, borderRadius: 32, backgroundColor: '#EF444420', alignItems: 'center', justifyContent: 'center', marginBottom: 16},
+  confirmIcon: {fontSize: 28},
+  confirmTitle: {fontSize: 20, fontWeight: '700', color: Colors.clareza, marginBottom: 8},
+  confirmMsg: {fontSize: 14, color: Colors.gray, textAlign: 'center', lineHeight: 20, marginBottom: 24},
+  confirmBtns: {flexDirection: 'row', gap: 12, width: '100%'},
+  confirmCancelBtn: {flex: 1, height: 48, backgroundColor: '#162433', borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#1E3448'},
+  confirmCancelText: {color: Colors.clareza, fontWeight: '600', fontSize: 15},
+  confirmDangerBtn: {flex: 1, height: 48, backgroundColor: '#EF4444', borderRadius: 10, alignItems: 'center', justifyContent: 'center'},
+  confirmDangerText: {color: '#FFF', fontWeight: '700', fontSize: 15},
 });

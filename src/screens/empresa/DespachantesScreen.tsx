@@ -1,11 +1,12 @@
 import React, {useState, useCallback} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Alert, RefreshControl, ActivityIndicator} from 'react-native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, RefreshControl, ActivityIndicator} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import Toast, {useToast} from '../../components/Toast';
 import {useAuth} from '../../context/AuthContext';
 import {listarDespachantes, cadastrarDespachante, atualizarDespachante, toggleDespachante, excluirDespachante, DespachanteData} from '../../services/api';
+import {useAlert} from '../../components/CustomAlert';
 
 function maskCpf(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 11);
@@ -25,6 +26,7 @@ export default function DespachantesScreen() {
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const {showToast} = useToast();
+  const {show} = useAlert();
   const [nome, setNome] = useState('');
   const [cpf, setCpf] = useState('');
   const [telefone, setTelefone] = useState('');
@@ -54,34 +56,34 @@ export default function DespachantesScreen() {
     if (res.success) {
       showToast(d.ativo ? 'Despachante desativado' : 'Despachante ativado', 'info');
       carregar();
-    } else Alert.alert('Erro', res.error || 'Falha.');
+    } else show({title: 'Erro', message: res.error || 'Falha.', type: 'error'});
   };
 
   const handleExcluir = (d: DespachanteData) => {
-    Alert.alert('Excluir despachante', 'Tem certeza que deseja excluir?', [
+    show({title: 'Excluir despachante', message: 'Tem certeza que deseja excluir?', type: 'confirm', buttons: [
       {text: 'Cancelar', style: 'cancel'},
       {text: 'Excluir', style: 'destructive', onPress: async () => {
         if (!empresa?.id) return;
         const res = await excluirDespachante(d.id, empresa.id);
         if (res.success) { showToast('Despachante excluído', 'error'); carregar(); }
-        else Alert.alert('Erro', res.error || 'Falha ao excluir.');
+        else show({title: 'Erro', message: res.error || 'Falha ao excluir.', type: 'error'});
       }},
-    ]);
+    ]});
   };
 
   const salvar = async () => {
-    if (!nome || !cpf) { Alert.alert('Preencha nome e CPF'); return; }
-    if (!editandoId && !senha) { Alert.alert('Preencha a senha de acesso'); return; }
+    if (!nome || !cpf) { show({title: 'Atenção', message: 'Preencha nome e CPF', type: 'warning'}); return; }
+    if (!editandoId && !senha) { show({title: 'Atenção', message: 'Preencha a senha de acesso', type: 'warning'}); return; }
     if (!empresa?.id) return;
 
     if (editandoId) {
       const res = await atualizarDespachante(editandoId, {nome, cpf, telefone: telefone || undefined, senha: senha || undefined});
       if (res.success) { showToast('Despachante atualizado!', 'success'); carregar(); }
-      else Alert.alert('Erro', res.error || 'Falha ao atualizar.');
+      else show({title: 'Erro', message: res.error || 'Falha ao atualizar.', type: 'error'});
     } else {
       const res = await cadastrarDespachante(empresa.id, {nome, cpf, telefone: telefone || undefined, senha});
       if (res.success) { showToast('Despachante cadastrado!', 'success'); carregar(); }
-      else Alert.alert('Erro', res.error || 'Falha ao cadastrar.');
+      else show({title: 'Erro', message: res.error || 'Falha ao cadastrar.', type: 'error'});
     }
     limpar(); setModal(false);
   };

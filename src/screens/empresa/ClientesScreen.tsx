@@ -1,10 +1,11 @@
 import React, {useState, useCallback} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Alert, RefreshControl, ActivityIndicator} from 'react-native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, RefreshControl, ActivityIndicator} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import Toast, {useToast} from '../../components/Toast';
 import {useAuth} from '../../context/AuthContext';
 import {listarClientesEmpresa, atualizarVinculoCliente, bloquearVinculoCliente, excluirVinculoCliente, cadastrarClienteManual} from '../../services/api';
+import {useAlert} from '../../components/CustomAlert';
 
 function maskCpf(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 11);
@@ -34,6 +35,7 @@ type ClienteVinculo = {
 export default function ClientesScreen() {
   const {empresa} = useAuth();
   const {showToast} = useToast();
+  const {show} = useAlert();
   const [clientes, setClientes] = useState<ClienteVinculo[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -90,7 +92,7 @@ export default function ClientesScreen() {
   };
 
   const salvarNovo = async () => {
-    if (!nome || (!cpf && !cnpj)) { Alert.alert('Preencha o nome e pelo menos CPF ou CNPJ'); return; }
+    if (!nome || (!cpf && !cnpj)) { show({title: 'Atenção', message: 'Preencha o nome e pelo menos CPF ou CNPJ', type: 'warning'}); return; }
     if (!empresa?.id) return;
     const res = await cadastrarClienteManual(empresa.id, {
       nome, cpf: cpf || undefined, cnpj: cnpj || undefined, rg: rg || undefined,
@@ -104,12 +106,12 @@ export default function ClientesScreen() {
       setModalNovo(false);
       carregar();
     } else {
-      Alert.alert('Erro', res.error || 'Não foi possível cadastrar.');
+      show({title: 'Erro', message: res.error || 'Não foi possível cadastrar.', type: 'error'});
     }
   };
 
   const salvar = async () => {
-    if (!nome || !telefone) { Alert.alert('Preencha nome e telefone'); return; }
+    if (!nome || !telefone) { show({title: 'Atenção', message: 'Preencha nome e telefone', type: 'warning'}); return; }
     if (!editando) return;
     const res = await atualizarVinculoCliente(editando.vinculo_id, {
       nome, cpf, cnpj, rg, telefone, email, data_nascimento: dataNascimento,
@@ -120,30 +122,30 @@ export default function ClientesScreen() {
       fecharModal();
       carregar();
     } else {
-      Alert.alert('Erro', res.error || 'Não foi possível salvar.');
+      show({title: 'Erro', message: res.error || 'Não foi possível salvar.', type: 'error'});
     }
   };
 
   const bloquear = (c: ClienteVinculo) => {
-    Alert.alert('Bloquear cliente', `Bloquear ${c.nome}? Ele não poderá se vincular novamente.`, [
+    show({title: 'Bloquear cliente', message: `Bloquear ${c.nome}? Ele não poderá se vincular novamente.`, type: 'confirm', buttons: [
       {text: 'Cancelar', style: 'cancel'},
       {text: 'Bloquear', style: 'destructive', onPress: async () => {
         const res = await bloquearVinculoCliente(c.vinculo_id);
         if (res.success) { showToast('Cliente bloqueado', 'info'); carregar(); }
-        else Alert.alert('Erro', res.error || 'Falha ao bloquear.');
+        else show({title: 'Erro', message: res.error || 'Falha ao bloquear.', type: 'error'});
       }},
-    ]);
+    ]});
   };
 
   const excluir = (c: ClienteVinculo) => {
-    Alert.alert('Excluir vínculo', `Remover ${c.nome}? Ele poderá se vincular novamente.`, [
+    show({title: 'Excluir vínculo', message: `Remover ${c.nome}? Ele poderá se vincular novamente.`, type: 'confirm', buttons: [
       {text: 'Cancelar', style: 'cancel'},
       {text: 'Excluir', style: 'destructive', onPress: async () => {
         const res = await excluirVinculoCliente(c.vinculo_id);
         if (res.success) { showToast('Vínculo removido', 'error'); carregar(); }
-        else Alert.alert('Erro', res.error || 'Falha ao excluir.');
+        else show({title: 'Erro', message: res.error || 'Falha ao excluir.', type: 'error'});
       }},
-    ]);
+    ]});
   };
 
   const filtrados = clientes.filter(c => {

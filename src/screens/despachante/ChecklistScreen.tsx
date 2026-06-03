@@ -1,12 +1,13 @@
 import React, {useState} from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Image, Alert, ActivityIndicator, Platform, PermissionsAndroid,
+  Image, ActivityIndicator, Platform, PermissionsAndroid,
 } from 'react-native';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {launchCamera, launchImageLibrary, CameraOptions} from 'react-native-image-picker';
 import {DespachanteStackParamList} from '../../navigation/DespachanteNavigator';
 import {Colors} from '../../theme/colors';
+import {useAlert} from '../../components/CustomAlert';
 
 async function solicitarPermissaoCamera(): Promise<boolean> {
   if (Platform.OS === 'ios') return true; // iOS pede automaticamente via Info.plist
@@ -45,6 +46,7 @@ const checklistEntrega = [
 export default function ChecklistScreen({route, navigation}: Props) {
   const {pedidoId, etapa} = route.params;
   const itens = etapa === 'coleta' ? checklistColeta : checklistEntrega;
+  const {show} = useAlert();
 
   const [marcados, setMarcados] = useState<boolean[]>(new Array(itens.length).fill(false));
   const [fotos, setFotos] = useState<string[]>([]);
@@ -57,14 +59,14 @@ export default function ChecklistScreen({route, navigation}: Props) {
   const tirarFoto = async () => {
     const permitido = await solicitarPermissaoCamera();
     if (!permitido) {
-      Alert.alert('Permissão negada', 'Ative a permissão de câmera nas configurações do celular.');
+      show({title: 'Permissão negada', message: 'Ative a permissão de câmera nas configurações do celular.', type: 'warning'});
       return;
     }
     const options: CameraOptions = {mediaType: 'photo', quality: 0.8, saveToPhotos: false};
     launchCamera(options, res => {
       if (res.didCancel) return;
       if (res.errorCode) {
-        Alert.alert('Erro', res.errorMessage ?? 'Não foi possível abrir a câmera.');
+        show({title: 'Erro', message: res.errorMessage ?? 'Não foi possível abrir a câmera.', type: 'error'});
         return;
       }
       const uri = res.assets?.[0]?.uri;
@@ -76,7 +78,7 @@ export default function ChecklistScreen({route, navigation}: Props) {
     launchImageLibrary({mediaType: 'photo', selectionLimit: 1}, res => {
       if (res.didCancel) return;
       if (res.errorCode) {
-        Alert.alert('Erro', res.errorMessage ?? 'Não foi possível abrir a galeria.');
+        show({title: 'Erro', message: res.errorMessage ?? 'Não foi possível abrir a galeria.', type: 'error'});
         return;
       }
       const uri = res.assets?.[0]?.uri;
@@ -86,20 +88,20 @@ export default function ChecklistScreen({route, navigation}: Props) {
 
   const concluir = () => {
     const todos = marcados.every(Boolean);
-    if (!todos) {Alert.alert('Atenção', 'Marque todos os itens do checklist.'); return;}
-    if (fotos.length === 0) {Alert.alert('Atenção', 'Tire pelo menos uma foto.'); return;}
+    if (!todos) {show({title: 'Atenção', message: 'Marque todos os itens do checklist.', type: 'warning'}); return;}
+    if (fotos.length === 0) {show({title: 'Atenção', message: 'Tire pelo menos uma foto.', type: 'warning'}); return;}
 
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
       if (etapa === 'coleta') {
-        Alert.alert('Coleta confirmada!', 'Dirija-se até a excursão.', [
+        show({title: 'Coleta confirmada!', message: 'Dirija-se até a excursão.', type: 'success', buttons: [
           {text: 'OK', onPress: () => navigation.replace('Checklist', {pedidoId, etapa: 'entrega'})},
-        ]);
+        ]});
       } else {
-        Alert.alert('Entrega confirmada!', 'Pedido finalizado com sucesso.', [
+        show({title: 'Entrega confirmada!', message: 'Pedido finalizado com sucesso.', type: 'success', buttons: [
           {text: 'OK', onPress: () => navigation.goBack()},
-        ]);
+        ]});
       }
     }, 1000);
   };

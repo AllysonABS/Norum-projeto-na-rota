@@ -137,6 +137,7 @@ app.post('/api/login-unificado', async (req, res) => {
             id: cliente.id, nome: cliente.nome, cpf: cliente.cpf, cnpj: cliente.cnpj || '',
             email: cliente.email, telefone: cliente.telefone, data_nascimento: cliente.data_nascimento || '',
             endereco: cliente.endereco || '', cidade: cliente.cidade || '', estado: cliente.estado || '', cep: cliente.cep || '',
+            data_cadastro: cliente.data_cadastro || '',
           },
         });
       }
@@ -764,6 +765,7 @@ app.post('/api/login-cliente', async (req, res) => {
         id: cliente.id, nome: cliente.nome, cpf: cliente.cpf, cnpj: cliente.cnpj || '',
         email: cliente.email, telefone: cliente.telefone, data_nascimento: cliente.data_nascimento || '',
         endereco: cliente.endereco || '', cidade: cliente.cidade || '', estado: cliente.estado || '', cep: cliente.cep || '',
+        data_cadastro: cliente.data_cadastro || '',
       },
     });
   } catch (err: any) {

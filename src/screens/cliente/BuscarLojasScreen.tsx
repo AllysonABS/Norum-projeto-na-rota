@@ -1,13 +1,15 @@
 import React, {useState, useEffect} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert} from 'react-native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import {useAuth} from '../../context/AuthContext';
 import {listarTodasLojas, vincularLoja, listarMinhasLojas, LojaData} from '../../services/api';
+import {useAlert} from '../../components/CustomAlert';
 
 export default function BuscarLojasScreen() {
   const navigation = useNavigation();
   const {cliente} = useAuth();
+  const {show} = useAlert();
   const [busca, setBusca] = useState('');
   const [lojas, setLojas] = useState<LojaData[]>([]);
   const [vinculadas, setVinculadas] = useState<string[]>([]);
@@ -35,9 +37,9 @@ export default function BuscarLojasScreen() {
     setVinculando(null);
     if (res.success) {
       setVinculadas([...vinculadas, empresaId]);
-      Alert.alert('Sucesso', 'Você foi vinculado a esta loja!');
+      show({title: 'Sucesso', message: 'Você foi vinculado a esta loja!', type: 'success'});
     } else {
-      Alert.alert('Erro', res.error || 'Não foi possível vincular.');
+      show({title: 'Erro', message: res.error || 'Não foi possível vincular.', type: 'error'});
     }
   };
 

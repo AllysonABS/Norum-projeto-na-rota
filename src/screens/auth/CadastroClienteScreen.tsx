@@ -1,10 +1,11 @@
 import React, {useState} from 'react';
-import {View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, StatusBar} from 'react-native';
+import {View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, StatusBar} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
 import {cadastrarCliente} from '../../services/api';
+import {useAlert} from '../../components/CustomAlert';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'CadastroCliente'>;
@@ -41,6 +42,7 @@ function maskData(value: string): string {
 }
 
 export default function CadastroClienteScreen({navigation}: Props) {
+  const {show} = useAlert();
   const [nome, setNome] = useState('');
   const [cpf, setCpf] = useState('');
   const [cnpj, setCnpj] = useState('');
@@ -57,15 +59,15 @@ export default function CadastroClienteScreen({navigation}: Props) {
 
   const handleCadastro = async () => {
     if (!nome || !cpf || !email || !telefone || !senha) {
-      Alert.alert('Atenção', 'Preencha todos os campos obrigatórios.');
+      show({title: 'Atenção', message: 'Preencha todos os campos obrigatórios.', type: 'warning'});
       return;
     }
     if (senha.length < 6) {
-      Alert.alert('Atenção', 'A senha deve ter no mínimo 6 caracteres.');
+      show({title: 'Atenção', message: 'A senha deve ter no mínimo 6 caracteres.', type: 'warning'});
       return;
     }
     if (senha !== confirmarSenha) {
-      Alert.alert('Atenção', 'As senhas não coincidem.');
+      show({title: 'Atenção', message: 'As senhas não coincidem.', type: 'warning'});
       return;
     }
 
@@ -86,11 +88,11 @@ export default function CadastroClienteScreen({navigation}: Props) {
     setLoading(false);
 
     if (res.success) {
-      Alert.alert('Sucesso', 'Cadastro realizado! Faça login para continuar.', [
+      show({title: 'Sucesso', message: 'Cadastro realizado! Faça login para continuar.', type: 'success', buttons: [
         {text: 'OK', onPress: () => navigation.replace('Login')},
-      ]);
+      ]});
     } else {
-      Alert.alert('Erro', res.error || 'Não foi possível realizar o cadastro.');
+      show({title: 'Erro', message: res.error || 'Não foi possível realizar o cadastro.', type: 'error'});
     }
   };
 

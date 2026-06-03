@@ -1,7 +1,8 @@
 import React, {useState, useCallback} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Image, RefreshControl, Alert} from 'react-native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Image, RefreshControl} from 'react-native';
 import {Colors} from '../../theme/colors';
 import Toast, {useToast} from '../../components/Toast';
+import {useAlert} from '../../components/CustomAlert';
 
 type Etapa = {nome: string; concluida: boolean; hora?: string};
 type Status = 'aguardando' | 'em_transito' | 'entregue';
@@ -90,6 +91,7 @@ export default function PedidosScreen() {
   const [modalNovo, setModalNovo] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const {showToast} = useToast();
+  const {show} = useAlert();
 
   // Form novo pedido
   const [novoCliente, setNovoCliente] = useState('');
@@ -108,7 +110,7 @@ export default function PedidosScreen() {
 
   const criarPedido = () => {
     if (!novoCliente || !novoDespachante || !novoExcursao || !novoVolumes) {
-      Alert.alert('Preencha os campos obrigatórios'); return;
+      show({title: 'Atenção', message: 'Preencha os campos obrigatórios', type: 'warning'}); return;
     }
     const novo: Pedido = {
       id: `#${String(Date.now()).slice(-4)}`,

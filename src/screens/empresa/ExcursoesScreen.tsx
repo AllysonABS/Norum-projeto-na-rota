@@ -1,11 +1,12 @@
 import React, {useState, useCallback} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Alert, RefreshControl, ActivityIndicator} from 'react-native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, RefreshControl, ActivityIndicator} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import Toast, {useToast} from '../../components/Toast';
 import {useAuth} from '../../context/AuthContext';
 import {listarExcursoes, cadastrarExcursao, atualizarExcursao, excluirExcursao, ExcursaoData} from '../../services/api';
+import {useAlert} from '../../components/CustomAlert';
 
 export default function ExcursoesScreen() {
   const navigation = useNavigation();
@@ -18,6 +19,7 @@ export default function ExcursoesScreen() {
   const [detalhe, setDetalhe] = useState<ExcursaoData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const {showToast} = useToast();
+  const {show} = useAlert();
   const [nome, setNome] = useState('');
   const [setor, setSetor] = useState('');
   const [vaga, setVaga] = useState('');
@@ -45,19 +47,19 @@ export default function ExcursoesScreen() {
   };
 
   const excluir = (id: string) => {
-    Alert.alert('Excluir excursão', 'Tem certeza que deseja excluir?', [
+    show({title: 'Excluir excursão', message: 'Tem certeza que deseja excluir?', type: 'confirm', buttons: [
       {text: 'Cancelar', style: 'cancel'},
       {text: 'Excluir', style: 'destructive', onPress: async () => {
         const res = await excluirExcursao(id);
         if (res.success) { showToast('Excursão excluída', 'error'); carregar(); }
-        else Alert.alert('Erro', res.error || 'Falha ao excluir.');
+        else show({title: 'Erro', message: res.error || 'Falha ao excluir.', type: 'error'});
       }},
-    ]);
+    ]});
   };
 
   const salvar = async () => {
     if (!nome || !setor || !vaga || !responsavel) {
-      Alert.alert('Atenção', 'Preencha todos os campos obrigatórios.');
+      show({title: 'Atenção', message: 'Preencha todos os campos obrigatórios.', type: 'warning'});
       return;
     }
     if (!empresa?.id) return;
@@ -65,11 +67,11 @@ export default function ExcursoesScreen() {
     if (editandoId) {
       const res = await atualizarExcursao(editandoId, dados);
       if (res.success) { showToast('Excursão atualizada!', 'success'); carregar(); }
-      else Alert.alert('Erro', res.error || 'Falha ao atualizar.');
+      else show({title: 'Erro', message: res.error || 'Falha ao atualizar.', type: 'error'});
     } else {
       const res = await cadastrarExcursao(empresa.id, dados);
       if (res.success) { showToast('Excursão cadastrada!', 'success'); carregar(); }
-      else Alert.alert('Erro', res.error || 'Falha ao cadastrar.');
+      else show({title: 'Erro', message: res.error || 'Falha ao cadastrar.', type: 'error'});
     }
     limpar(); setModal(false);
   };

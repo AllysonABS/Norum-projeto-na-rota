@@ -1,12 +1,14 @@
-import React, {useState} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Alert} from 'react-native';
+import React, {useState, useCallback} from 'react';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
+import {useFocusEffect} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
 import Toast, {useToast} from '../../components/Toast';
 import {useAuth} from '../../context/AuthContext';
-import {atualizarCliente} from '../../services/api';
+import {atualizarCliente, listarMinhasLojas} from '../../services/api';
+import {useAlert} from '../../components/CustomAlert';
 
 function maskCpf(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 11);
@@ -20,7 +22,17 @@ export default function PerfilScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {showToast} = useToast();
   const {cliente, setCliente} = useAuth();
+  const {show} = useAlert();
   const [modalEditar, setModalEditar] = useState(false);
+  const [totalLojas, setTotalLojas] = useState(0);
+
+  useFocusEffect(useCallback(() => {
+    if (cliente?.id) {
+      listarMinhasLojas(cliente.id).then(res => {
+        if (res.success && res.lojas) setTotalLojas(res.lojas.length);
+      });
+    }
+  }, [cliente?.id]));
 
   // Form temporário para edição
   const [formNome, setFormNome] = useState('');
@@ -52,7 +64,7 @@ export default function PerfilScreen() {
   };
 
   const salvar = async () => {
-    if (!formNome || !formTelefone) { Alert.alert('Preencha nome e telefone'); return; }
+    if (!formNome || !formTelefone) { show({title: 'Atenção', message: 'Preencha nome e telefone', type: 'warning'}); return; }
     if (!cliente?.id) return;
 
     const res = await atualizarCliente(cliente.id, {
@@ -68,7 +80,7 @@ export default function PerfilScreen() {
       setModalEditar(false);
       showToast('Perfil atualizado!', 'success');
     } else {
-      Alert.alert('Erro', res.error || 'Não foi possível salvar.');
+      show({title: 'Erro', message: res.error || 'Não foi possível salvar.', type: 'error'});
     }
   };
 
@@ -89,11 +101,11 @@ export default function PerfilScreen() {
             <Text style={s.resumoLabel}>Pedidos</Text>
           </View>
           <View style={s.resumoCard}>
-            <Text style={s.resumoValor}>0</Text>
+            <Text style={s.resumoValor}>{totalLojas}</Text>
             <Text style={s.resumoLabel}>Lojas</Text>
           </View>
           <View style={s.resumoCard}>
-            <Text style={s.resumoValor}>—</Text>
+            <Text style={s.resumoValor}>{cliente?.data_cadastro ? new Date(cliente.data_cadastro).toLocaleDateString('pt-BR', {month: 'short', year: 'numeric'}) : '—'}</Text>
             <Text style={s.resumoLabel}>Cliente desde</Text>
           </View>
         </View>
@@ -121,11 +133,11 @@ export default function PerfilScreen() {
         {/* Opções */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>Opções</Text>
-          <TouchableOpacity style={s.row} onPress={() => Alert.alert('Em breve', 'Funcionalidade de notificações em desenvolvimento.')}>
+          <TouchableOpacity style={s.row} onPress={() => show({title: 'Em breve', message: 'Funcionalidade de notificações em desenvolvimento.', type: 'info'})}>
             <Text style={s.rowLabel}>🔔 Notificações</Text>
             <Text style={s.rowValue}>Ativadas</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[s.row, {borderBottomWidth: 0}]} onPress={() => Alert.alert('Em breve', 'Funcionalidade de alterar senha em desenvolvimento.')}>
+          <TouchableOpacity style={[s.row, {borderBottomWidth: 0}]} onPress={() => show({title: 'Em breve', message: 'Funcionalidade de alterar senha em desenvolvimento.', type: 'info'})}>
             <Text style={s.rowLabel}>🔒 Alterar senha</Text>
             <Text style={s.rowArrow}>›</Text>
           </TouchableOpacity>

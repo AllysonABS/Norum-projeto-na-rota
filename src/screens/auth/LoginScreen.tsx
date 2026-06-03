@@ -9,7 +9,6 @@ import {
   Platform,
   ActivityIndicator,
   StatusBar,
-  Alert,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -18,6 +17,7 @@ import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
 import {loginUnificado} from '../../services/api';
 import {useAuth} from '../../context/AuthContext';
+import {useAlert} from '../../components/CustomAlert';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Login'>;
@@ -86,6 +86,7 @@ export default function LoginScreen({navigation}: Props) {
   const [lembrar, setLembrar] = useState(false);
   const [loading, setLoading] = useState(false);
   const {setEmpresa, setCliente, setDespachante} = useAuth();
+  const {show} = useAlert();
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then(data => {
@@ -100,7 +101,7 @@ export default function LoginScreen({navigation}: Props) {
 
   const handleLogin = async () => {
     if (!cpfCnpj || !password) {
-      Alert.alert('Atenção', 'Preencha CPF/CNPJ e senha.');
+      show({title: 'Atenção', message: 'Preencha CPF/CNPJ e senha.', type: 'warning'});
       return;
     }
     setLoading(true);
@@ -125,10 +126,10 @@ export default function LoginScreen({navigation}: Props) {
         setCliente(res.cliente);
         navigation.replace('Cliente');
       } else {
-        Alert.alert('Erro', res.error || 'Credenciais inválidas.');
+        show({title: 'Erro', message: res.error || 'Credenciais inválidas.', type: 'error'});
       }
     } catch {
-      Alert.alert('Erro', 'Falha na conexão com o servidor.');
+      show({title: 'Erro', message: 'Falha na conexão com o servidor.', type: 'error'});
     } finally {
       setLoading(false);
     }

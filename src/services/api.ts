@@ -86,6 +86,7 @@ export type ClienteData = {
   cidade?: string;
   estado?: string;
   cep?: string;
+  data_cadastro?: string;
 };
 
 export async function cadastrarCliente(dados: {
