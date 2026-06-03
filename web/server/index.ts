@@ -672,8 +672,11 @@ app.post('/api/empresa/:empresaId/pedidos', async (req, res) => {
       [empresaId, cliente_id || null, despachante_id || null, excursao_id || null, cliente_nome, despachante_nome, excursao_nome, volumes || 1, descricao || null]
     );
     const pedidoId = result.rows[0].id;
+    // Busca o numero sequencial
+    const numRes = await pool.query('SELECT numero FROM pedidos WHERE id=$1', [pedidoId]);
+    const numeroPedido = numRes.rows[0].numero;
     // Cria etapas padr\u00e3o
-    const etapas = ['Pedido recebido', 'Coleta realizada', 'Em rota para excurs\u00e3o', 'Entregue na excurs\u00e3o'];
+    const etapas = ['Pedido recebido na empresa', 'Coleta realizada', 'Em rota para excurs\u00e3o', 'Entregue na excurs\u00e3o'];
     for (let i = 0; i < etapas.length; i++) {
       const concluida = i === 0;
       const hora = i === 0 ? new Date() : null;
@@ -684,18 +687,43 @@ app.post('/api/empresa/:empresaId/pedidos', async (req, res) => {
     }
     // Notifica o cliente se tiver id
     if (cliente_id) {
-      // Busca tokens FCM do cliente (futuro) - por agora s\u00f3 cria notifica\u00e7\u00e3o in-app
       const empresaNome = await pool.query('SELECT nome_empresa FROM empresas WHERE id=$1', [empresaId]);
       const nomeEmp = empresaNome.rows[0]?.nome_empresa || 'Uma empresa';
-      await pool.query(
-        `INSERT INTO notificacoes (empresa_id, tipo, titulo, mensagem, dados)
-         VALUES ($1, 'novo_pedido', 'Novo pedido criado', $2, $3)`,
-        [empresaId, `Pedido criado para ${cliente_nome} por ${nomeEmp}.`, JSON.stringify({pedido_id: pedidoId, cliente_id})]
-      );
+      // Envia push pro cliente
+      try {
+        if (admin.apps.length > 0) {
+          const tokens = await pool.query('SELECT token FROM cliente_fcm_tokens WHERE cliente_id=$1', [cliente_id]);
+          if (tokens.rows.length > 0) {
+            await admin.messaging().sendEachForMulticast({
+              tokens: tokens.rows.map((r: any) => r.token),
+              notification: { title: 'Novo pedido criado', body: `${nomeEmp} criou o pedido #${numeroPedido} para voc\u00ea.` },
+              data: { tipo: 'novo_pedido', pedido_id: pedidoId },
+            });
+          }
+        }
+      } catch (pushErr) { console.error('[PUSH] Erro cliente:', pushErr); }
     }
-    res.status(201).json({success: true, pedido_id: pedidoId});
+    res.status(201).json({success: true, pedido_id: pedidoId, numero: numeroPedido});
   } catch (err: any) {
     console.error('Erro ao criar pedido:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Salvar FCM token do cliente
+app.put('/api/cliente/:id/fcm-token', async (req, res) => {
+  try {
+    const {id} = req.params;
+    const {token} = req.body;
+    if (!token) return res.status(400).json({error: 'Token obrigat\u00f3rio.'});
+    await pool.query(
+      `INSERT INTO cliente_fcm_tokens (cliente_id, token) VALUES ($1, $2)
+       ON CONFLICT (cliente_id, token) DO UPDATE SET atualizado_em = NOW()`,
+      [id, token]
+    );
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao salvar FCM token cliente:', err);
     res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });
