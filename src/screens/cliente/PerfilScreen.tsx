@@ -7,7 +7,7 @@ import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
 import Toast, {useToast} from '../../components/Toast';
 import {useAuth} from '../../context/AuthContext';
-import {atualizarCliente, listarMinhasLojas} from '../../services/api';
+import {atualizarCliente, listarMinhasLojas, alterarSenhaCliente} from '../../services/api';
 import {useAlert} from '../../components/CustomAlert';
 
 function maskCpf(value: string): string {
@@ -42,7 +42,12 @@ export default function PerfilScreen() {
   const {cliente, setCliente} = useAuth();
   const {show} = useAlert();
   const [modalEditar, setModalEditar] = useState(false);
+  const [modalSenha, setModalSenha] = useState(false);
   const [totalLojas, setTotalLojas] = useState(0);
+  const [senhaAtual, setSenhaAtual] = useState('');
+  const [novaSenha, setNovaSenha] = useState('');
+  const [confirmarNovaSenha, setConfirmarNovaSenha] = useState('');
+  const [salvandoSenha, setSalvandoSenha] = useState(false);
 
   const buscarCep = async (cepValue: string) => {
     const digits = cepValue.replace(/\D/g, '');
@@ -95,6 +100,29 @@ export default function PerfilScreen() {
   const cep = cliente?.cep || '';
 
   const enderecoCompleto = endereco ? `${endereco}${numero ? ', ' + numero : ''}${bairro ? ' - ' + bairro : ''}${complemento ? ' (' + complemento + ')' : ''}` : 'Não informado';
+
+  const salvarSenha = async () => {
+    if (!senhaAtual || !novaSenha || !confirmarNovaSenha) {
+      show({title: 'Atenção', message: 'Preencha todos os campos.', type: 'warning'}); return;
+    }
+    if (novaSenha.length < 6) {
+      show({title: 'Atenção', message: 'A nova senha deve ter no mínimo 6 caracteres.', type: 'warning'}); return;
+    }
+    if (novaSenha !== confirmarNovaSenha) {
+      show({title: 'Atenção', message: 'As senhas não coincidem.', type: 'warning'}); return;
+    }
+    if (!cliente?.id) return;
+    setSalvandoSenha(true);
+    const res = await alterarSenhaCliente(cliente.id, senhaAtual, novaSenha);
+    setSalvandoSenha(false);
+    if (res.success) {
+      setModalSenha(false);
+      setSenhaAtual(''); setNovaSenha(''); setConfirmarNovaSenha('');
+      showToast('Senha alterada com sucesso!', 'success');
+    } else {
+      show({title: 'Erro', message: res.error || 'Não foi possível alterar a senha.', type: 'error'});
+    }
+  };
 
   const abrirEditar = () => {
     setFormNome(nome); setFormTelefone(telefone); setFormEmail(email);
@@ -177,11 +205,7 @@ export default function PerfilScreen() {
         {/* Opções */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>Opções</Text>
-          <TouchableOpacity style={s.row} onPress={() => show({title: 'Em breve', message: 'Funcionalidade de notificações em desenvolvimento.', type: 'info'})}>
-            <Text style={s.rowLabel}>🔔 Notificações</Text>
-            <Text style={s.rowValue}>Ativadas</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[s.row, {borderBottomWidth: 0}]} onPress={() => show({title: 'Em breve', message: 'Funcionalidade de alterar senha em desenvolvimento.', type: 'info'})}>
+          <TouchableOpacity style={[s.row, {borderBottomWidth: 0}]} onPress={() => setModalSenha(true)}>
             <Text style={s.rowLabel}>🔒 Alterar senha</Text>
             <Text style={s.rowArrow}>›</Text>
           </TouchableOpacity>
@@ -243,6 +267,29 @@ export default function PerfilScreen() {
                 <Text style={s.cancel}>Cancelar</Text>
               </TouchableOpacity>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal alterar senha */}
+      <Modal visible={modalSenha} transparent animationType="slide">
+        <View style={s.overlay}>
+          <View style={s.sheet}>
+            <Text style={s.sheetTitle}>Alterar Senha</Text>
+
+            <Text style={s.label}>Senha atual</Text>
+            <TextInput style={s.input} value={senhaAtual} onChangeText={setSenhaAtual} placeholderTextColor={Colors.gray} placeholder="Sua senha atual" secureTextEntry />
+            <Text style={s.label}>Nova senha</Text>
+            <TextInput style={s.input} value={novaSenha} onChangeText={setNovaSenha} placeholderTextColor={Colors.gray} placeholder="Mínimo 6 caracteres" secureTextEntry />
+            <Text style={s.label}>Confirmar nova senha</Text>
+            <TextInput style={s.input} value={confirmarNovaSenha} onChangeText={setConfirmarNovaSenha} placeholderTextColor={Colors.gray} placeholder="Repita a nova senha" secureTextEntry />
+
+            <TouchableOpacity style={s.saveBtn} onPress={salvarSenha} disabled={salvandoSenha}>
+              <Text style={s.saveBtnText}>{salvandoSenha ? 'Salvando...' : 'Alterar Senha'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { setModalSenha(false); setSenhaAtual(''); setNovaSenha(''); setConfirmarNovaSenha(''); }}>
+              <Text style={s.cancel}>Cancelar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

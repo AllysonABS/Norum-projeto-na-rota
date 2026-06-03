@@ -121,6 +121,19 @@ export async function atualizarCliente(id: string, dados: Partial<ClienteData>):
   }
 }
 
+export async function alterarSenhaCliente(id: string, senha_atual: string, nova_senha: string): Promise<{success: boolean; error?: string}> {
+  try {
+    const res = await fetch(`${API_URL}/api/cliente/${id}/alterar-senha`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({senha_atual, nova_senha}),
+    });
+    return await res.json();
+  } catch {
+    return {success: false, error: 'Erro de conexão com o servidor.'};
+  }
+}
+
 export async function loginCliente(cpf: string, senha: string): Promise<{success: boolean; cliente?: ClienteData; error?: string}> {
   try {
     const res = await fetch(`${API_URL}/api/login-cliente`, {

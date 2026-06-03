@@ -719,6 +719,26 @@ app.delete('/api/excursoes/:excursaoId', async (req, res) => {
   }
 });
 
+// Alterar senha do cliente
+app.put('/api/cliente/:id/alterar-senha', async (req, res) => {
+  try {
+    const {id} = req.params;
+    const {senha_atual, nova_senha} = req.body;
+    if (!senha_atual || !nova_senha) return res.status(400).json({error: 'Preencha todos os campos.'});
+    if (nova_senha.length < 6) return res.status(400).json({error: 'A nova senha deve ter no m\u00ednimo 6 caracteres.'});
+    const result = await pool.query('SELECT senha_hash FROM clientes WHERE id=$1', [id]);
+    if (result.rows.length === 0) return res.status(404).json({error: 'Cliente n\u00e3o encontrado.'});
+    const valida = await bcrypt.compare(senha_atual, result.rows[0].senha_hash);
+    if (!valida) return res.status(401).json({error: 'Senha atual incorreta.'});
+    const nova_hash = await bcrypt.hash(nova_senha, 10);
+    await pool.query('UPDATE clientes SET senha_hash=$1 WHERE id=$2', [nova_hash, id]);
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao alterar senha:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
 // Cadastro de cliente
 app.post('/api/cadastro-cliente', async (req, res) => {
   try {
