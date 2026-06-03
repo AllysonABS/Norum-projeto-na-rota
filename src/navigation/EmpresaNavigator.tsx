@@ -12,6 +12,7 @@ import DespachantesScreen from '../screens/empresa/DespachantesScreen';
 import ExcursoesScreen from '../screens/empresa/ExcursoesScreen';
 import RelatoriosScreen from '../screens/empresa/RelatoriosScreen';
 import ConfiguracoesScreen from '../screens/empresa/ConfiguracoesScreen';
+import NotificacoesScreen from '../screens/empresa/NotificacoesScreen';
 
 const Tab = createMaterialTopTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -67,6 +68,7 @@ export default function EmpresaNavigator() {
       <Stack.Screen name="Excursões" component={ExcursoesScreen} />
       <Stack.Screen name="Relatórios" component={RelatoriosScreen} />
       <Stack.Screen name="Configurações" component={ConfiguracoesScreen} />
+      <Stack.Screen name="Notificações" component={NotificacoesScreen} />
     </Stack.Navigator>
   );
 }

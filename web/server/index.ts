@@ -4,6 +4,23 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
+import admin from 'firebase-admin';
+
+// Inicializa Firebase Admin
+const firebaseServiceAccount = {
+  type: 'service_account',
+  project_id: 'na-rota-norum',
+  private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID || '',
+  private_key: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+  client_email: process.env.FIREBASE_CLIENT_EMAIL || '',
+  client_id: process.env.FIREBASE_CLIENT_ID || '',
+  auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+  token_uri: 'https://oauth2.googleapis.com/token',
+} as admin.ServiceAccount;
+
+admin.initializeApp({
+  credential: admin.credential.cert(firebaseServiceAccount),
+});
 
 const app = express();
 app.use(cors());
@@ -239,11 +256,9 @@ app.post('/api/empresa/:empresaId/cadastrar-cliente', async (req, res) => {
 app.post('/api/cliente/:clienteId/vincular/:empresaId', async (req, res) => {
   try {
     const {clienteId, empresaId} = req.params;
-    // Busca CPF e CNPJ do cliente
-    const clienteRes = await pool.query('SELECT cpf, cnpj FROM clientes WHERE id=$1', [clienteId]);
+    const clienteRes = await pool.query('SELECT nome, cpf, cnpj FROM clientes WHERE id=$1', [clienteId]);
     if (clienteRes.rows.length === 0) return res.status(404).json({error: 'Cliente não encontrado.'});
-    const {cpf, cnpj} = clienteRes.rows[0];
-    // Verifica bloqueio por cliente_id, CPF ou CNPJ
+    const {nome, cpf, cnpj} = clienteRes.rows[0];
     const bloqueado = await pool.query(
       `SELECT id FROM cliente_empresa WHERE empresa_id=$1 AND status='bloqueado'
        AND (cliente_id=$2 OR ($3::text IS NOT NULL AND cpf=$3) OR ($4::text IS NOT NULL AND cnpj=$4))`,
@@ -252,7 +267,6 @@ app.post('/api/cliente/:clienteId/vincular/:empresaId', async (req, res) => {
     if (bloqueado.rows.length > 0) {
       return res.status(403).json({error: 'Você foi bloqueado por esta loja.'});
     }
-    // Verifica se ja existe vinculo manual (sem cliente_id) com mesmo CPF ou CNPJ
     let vinculoExistente = null;
     if (cpf) {
       const v = await pool.query('SELECT id FROM cliente_empresa WHERE empresa_id=$1 AND cpf=$2 AND cliente_id IS NULL', [empresaId, cpf]);
@@ -270,9 +284,86 @@ app.post('/api/cliente/:clienteId/vincular/:empresaId', async (req, res) => {
         await pool.query('INSERT INTO cliente_empresa (cliente_id, empresa_id) VALUES ($1, $2)', [clienteId, empresaId]);
       }
     }
+    // Cria notificacao e envia push
+    await pool.query(
+      `INSERT INTO notificacoes (empresa_id, tipo, titulo, mensagem, dados)
+       VALUES ($1, 'novo_vinculo', 'Novo cliente vinculado', $2, $3)`,
+      [empresaId, `${nome} se vinculou à sua loja.`, JSON.stringify({cliente_id: clienteId, nome, cpf})]
+    );
+    // Envia push notification
+    try {
+      const tokens = await pool.query('SELECT token FROM empresa_fcm_tokens WHERE empresa_id=$1', [empresaId]);
+      if (tokens.rows.length > 0) {
+        await admin.messaging().sendEachForMulticast({
+          tokens: tokens.rows.map((r: any) => r.token),
+          notification: { title: 'Novo cliente vinculado', body: `${nome} se vinculou à sua loja.` },
+          data: { tipo: 'novo_vinculo', cliente_id: clienteId },
+        });
+      }
+    } catch (pushErr) { console.error('Erro ao enviar push:', pushErr); }
     res.json({success: true});
   } catch (err: any) {
     console.error('Erro ao vincular:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Salvar FCM token da empresa
+app.put('/api/empresa/:id/fcm-token', async (req, res) => {
+  try {
+    const {id} = req.params;
+    const {token} = req.body;
+    if (!token) return res.status(400).json({error: 'Token obrigatório.'});
+    await pool.query(
+      `INSERT INTO empresa_fcm_tokens (empresa_id, token) VALUES ($1, $2)
+       ON CONFLICT (empresa_id, token) DO UPDATE SET atualizado_em = NOW()`,
+      [id, token]
+    );
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao salvar FCM token:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Listar notificacoes da empresa
+app.get('/api/empresa/:id/notificacoes', async (req, res) => {
+  try {
+    const {id} = req.params;
+    const result = await pool.query(
+      'SELECT id, tipo, titulo, mensagem, dados, lida, criado_em FROM notificacoes WHERE empresa_id=$1 ORDER BY criado_em DESC LIMIT 50',
+      [id]
+    );
+    res.json({success: true, notificacoes: result.rows});
+  } catch (err: any) {
+    console.error('Erro ao listar notificacoes:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Contar notificacoes nao lidas
+app.get('/api/empresa/:id/notificacoes/nao-lidas', async (req, res) => {
+  try {
+    const {id} = req.params;
+    const result = await pool.query(
+      'SELECT COUNT(*)::int as total FROM notificacoes WHERE empresa_id=$1 AND lida=false',
+      [id]
+    );
+    res.json({success: true, total: result.rows[0].total});
+  } catch (err: any) {
+    console.error('Erro ao contar notificacoes:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Marcar notificacoes como lidas
+app.put('/api/empresa/:id/notificacoes/marcar-lidas', async (req, res) => {
+  try {
+    const {id} = req.params;
+    await pool.query('UPDATE notificacoes SET lida=true WHERE empresa_id=$1 AND lida=false', [id]);
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao marcar lidas:', err);
     res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });

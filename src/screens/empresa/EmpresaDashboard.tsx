@@ -1,9 +1,12 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect, useCallback} from 'react';
 import {View, Text, ScrollView, StyleSheet, TouchableOpacity} from 'react-native';
-import {useNavigation} from '@react-navigation/native';
+import {useNavigation, useFocusEffect} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
+import {useAuth} from '../../context/AuthContext';
+import {contarNotificacoesNaoLidas} from '../../services/api';
+import {requestNotificationPermission, getFCMToken, registrarTokenEmpresa, onForegroundMessage} from '../../services/notifications';
 
 const getGreeting = () => {
   const h = new Date().getHours();
@@ -66,17 +69,53 @@ const recentes = [
 
 export default function EmpresaDashboard() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const {empresa} = useAuth();
+  const [naoLidas, setNaoLidas] = useState(0);
+
+  // Registra FCM token e pede permissão
+  useEffect(() => {
+    (async () => {
+      if (!empresa?.id) return;
+      const permitido = await requestNotificationPermission();
+      if (!permitido) return;
+      const token = await getFCMToken();
+      if (token) await registrarTokenEmpresa(empresa.id, token);
+    })();
+  }, [empresa?.id]);
+
+  // Polling de notificações não lidas
+  useFocusEffect(useCallback(() => {
+    if (!empresa?.id) return;
+    const buscar = () => contarNotificacoesNaoLidas(empresa.id).then(r => { if (r.success) setNaoLidas(r.total || 0); });
+    buscar();
+    const interval = setInterval(buscar, 15000);
+    return () => clearInterval(interval);
+  }, [empresa?.id]));
+
+  // Atualiza badge quando recebe push em foreground
+  useEffect(() => {
+    const unsub = onForegroundMessage(() => {
+      if (empresa?.id) contarNotificacoesNaoLidas(empresa.id).then(r => { if (r.success) setNaoLidas(r.total || 0); });
+    });
+    return unsub;
+  }, [empresa?.id]);
 
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
       <View style={s.header}>
         <View>
           <Text style={s.greeting}>{getGreeting()}</Text>
-          <Text style={s.company}>Na Rota Transportes</Text>
+          <Text style={s.company}>{empresa?.nome_empresa || 'Na Rota Transportes'}</Text>
         </View>
-        <TouchableOpacity style={s.exitBtn} onPress={() => navigation.replace('Login')}>
-          <Text style={s.exitText}>Sair</Text>
-        </TouchableOpacity>
+        <View style={s.headerRight}>
+          <TouchableOpacity style={s.notifBtn} onPress={() => (navigation as any).navigate('Notificações')}>
+            <Text style={s.notifIcon}>🔔</Text>
+            {naoLidas > 0 && <View style={s.badge}><Text style={s.badgeText}>{naoLidas > 9 ? '9+' : naoLidas}</Text></View>}
+          </TouchableOpacity>
+          <TouchableOpacity style={s.exitBtn} onPress={() => navigation.replace('Login')}>
+            <Text style={s.exitText}>Sair</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
 
@@ -178,6 +217,11 @@ const s = StyleSheet.create({
   header:      {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20},
   greeting:    {fontSize: 14, color: Colors.gray, marginBottom: 2},
   company:     {fontSize: 20, fontWeight: '700', color: Colors.clareza},
+  headerRight: {flexDirection: 'row', alignItems: 'center', gap: 10},
+  notifBtn:    {position: 'relative', padding: 8},
+  notifIcon:   {fontSize: 22},
+  badge:       {position: 'absolute', top: 2, right: 2, backgroundColor: '#EF4444', borderRadius: 10, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4},
+  badgeText:   {color: '#FFF', fontSize: 10, fontWeight: '800'},
   exitBtn:     {backgroundColor: '#162433', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8},
   exitText:    {color: Colors.pulso, fontSize: 13, fontWeight: '600'},
 

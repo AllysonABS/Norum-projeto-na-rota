@@ -215,7 +215,44 @@ export async function cadastrarClienteManual(empresaId: string, dados: {
   }
 }
 
-// === EXCURSÕES ===
+// === NOTIFICAÇÕES ===
+
+export type NotificacaoData = {
+  id: string;
+  tipo: string;
+  titulo: string;
+  mensagem: string;
+  dados: any;
+  lida: boolean;
+  criado_em: string;
+};
+
+export async function listarNotificacoes(empresaId: string): Promise<{success: boolean; notificacoes?: NotificacaoData[]; error?: string}> {
+  try {
+    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/notificacoes`);
+    return await res.json();
+  } catch {
+    return {success: false, error: 'Erro de conexão com o servidor.'};
+  }
+}
+
+export async function contarNotificacoesNaoLidas(empresaId: string): Promise<{success: boolean; total?: number; error?: string}> {
+  try {
+    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/notificacoes/nao-lidas`);
+    return await res.json();
+  } catch {
+    return {success: false, error: 'Erro de conexão com o servidor.'};
+  }
+}
+
+export async function marcarNotificacoesLidas(empresaId: string): Promise<{success: boolean; error?: string}> {
+  try {
+    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/notificacoes/marcar-lidas`, {method: 'PUT'});
+    return await res.json();
+  } catch {
+    return {success: false, error: 'Erro de conexão com o servidor.'};
+  }
+}
 
 // === DESPACHANTES ===
 

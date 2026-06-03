@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "745962341193",
+    "project_id": "na-rota-norum",
+    "storage_bucket": "na-rota-norum.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:745962341193:android:b9a26ca79de4dc61aa5098",
+        "android_client_info": {
+          "package_name": "com.norumtransporte"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB0VBq5rTqvZvKe396K_wCkTYXSkbqUuok"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
