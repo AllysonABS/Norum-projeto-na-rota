@@ -1,6 +1,6 @@
 // Para teste local, troque para seu IP local
-// Para produção no VPS: http://76.13.70.131:3001
-const API_URL = 'http://localhost:3001';
+// Produção: https://narota.norum.app
+const API_URL = 'https://narota.norum.app';
 
 export type EmpresaData = {
   id: string;

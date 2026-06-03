@@ -38,7 +38,7 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Na Rota precisa acessar a galeria para anexar fotos aos pedidos.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<string>Na Rota precisa acessar sua localização para rastrear as entregas em andamento.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
