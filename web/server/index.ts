@@ -17,6 +17,11 @@ if (existsSync(firebaseKeyPath)) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
+} else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
 } else {
   console.warn('Firebase service account not found, push notifications disabled.');
 }
