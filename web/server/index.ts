@@ -360,15 +360,22 @@ app.post('/api/cliente/:clienteId/vincular/:empresaId', async (req, res) => {
     try {
       if (admin.apps.length > 0) {
         const tokens = await pool.query('SELECT token FROM empresa_fcm_tokens WHERE empresa_id=$1', [empresaId]);
+        console.log(`[PUSH] Firebase ativo. Tokens encontrados: ${tokens.rows.length}`);
         if (tokens.rows.length > 0) {
-          await admin.messaging().sendEachForMulticast({
+          const result = await admin.messaging().sendEachForMulticast({
             tokens: tokens.rows.map((r: any) => r.token),
             notification: { title: 'Novo cliente vinculado', body: `${nome} se vinculou à sua loja.` },
             data: { tipo: 'novo_vinculo', cliente_id: clienteId },
           });
+          console.log(`[PUSH] Enviado: ${result.successCount} sucesso, ${result.failureCount} falha`);
+          result.responses.forEach((r: any, i: number) => {
+            if (!r.success) console.log(`[PUSH] Falha token ${i}:`, r.error?.message);
+          });
         }
+      } else {
+        console.log('[PUSH] Firebase NAO inicializado');
       }
-    } catch (pushErr) { console.error('Erro ao enviar push:', pushErr); }
+    } catch (pushErr) { console.error('[PUSH] Erro:', pushErr); }
     res.json({success: true});
   } catch (err: any) {
     console.error('Erro ao vincular:', err);
