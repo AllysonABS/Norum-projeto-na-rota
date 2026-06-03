@@ -39,9 +39,7 @@ messaging().onMessage(async remoteMessage => {
   await displayNotification(remoteMessage);
 });
 
-// Handler para notificações em background
-messaging().setBackgroundMessageHandler(async remoteMessage => {
-  await displayNotification(remoteMessage);
-});
+// Handler para notificações em background (não exibe pois o sistema já mostra)
+messaging().setBackgroundMessageHandler(async _remoteMessage => {});
 
 AppRegistry.registerComponent(appName, () => App);
