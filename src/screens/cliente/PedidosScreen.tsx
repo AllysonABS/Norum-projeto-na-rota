@@ -195,7 +195,7 @@ const s = StyleSheet.create({
   searchIcon:     {fontSize: 16, marginRight: 8},
   searchInput:    {flex: 1, height: 44, color: Colors.clareza, fontSize: 15},
   filtrosScroll:  {maxHeight: 44, marginBottom: 10},
-  filtrosRow:     {paddingHorizontal: 24, gap: 8},
+  filtrosRow:     {paddingHorizontal: 24, gap: 8, justifyContent: 'center', flexGrow: 1, alignItems: 'center'},
   filtroChip:     {backgroundColor: '#162433', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: '#1E3448'},
   filtroAtivo:    {backgroundColor: Colors.pulso + '20', borderColor: Colors.pulso},
   filtroText:     {fontSize: 13, color: Colors.gray, fontWeight: '600'},

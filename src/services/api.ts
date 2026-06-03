@@ -1,6 +1,6 @@
 // Para teste local, troque para seu IP local
 // Para produção no VPS: http://76.13.70.131:3001
-const API_URL = 'http://192.168.15.16:3001';
+const API_URL = 'http://localhost:3001';
 
 export type EmpresaData = {
   id: string;

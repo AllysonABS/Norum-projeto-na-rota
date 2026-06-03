@@ -36,7 +36,7 @@ export default function ClienteNavigator() {
       tabBarPosition="bottom"
       screenOptions={({route}) => ({
         tabBarIcon: ({focused}) => (
-          <Text style={{fontSize: focused ? 22 : 18}}>{icon[route.name]}</Text>
+          <Text style={{fontSize: 20, opacity: focused ? 1 : 0.5}}>{icon[route.name]}</Text>
         ),
         tabBarShowIcon: true,
         tabBarActiveTintColor: Colors.pulso,
@@ -49,7 +49,8 @@ export default function ClienteNavigator() {
           paddingBottom: insets.bottom + 4,
         },
         tabBarLabelStyle: {fontSize: 11, fontWeight: '600', textTransform: 'none'},
-        tabBarIndicatorStyle: {backgroundColor: Colors.pulso, top: 0},
+        tabBarIndicatorStyle: {backgroundColor: Colors.pulso, top: 0, height: 3, borderRadius: 2},
+        tabBarPressColor: 'transparent',
       })}>
       <Tab.Screen name="Pedidos" component={PedidosScreen} />
       <Tab.Screen name="Lojas" component={EmpresasStackNavigator} />
