@@ -256,7 +256,7 @@ app.put('/api/cliente/:id', async (req, res) => {
 app.get('/api/lojas', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, nome_empresa, cidade, estado, horario_funcionamento FROM empresas WHERE ativa = true ORDER BY nome_empresa'
+      'SELECT id, nome_empresa, cidade, estado, horario_funcionamento, telefone FROM empresas WHERE ativa = true ORDER BY nome_empresa'
     );
     res.json({success: true, lojas: result.rows});
   } catch (err: any) {
@@ -270,7 +270,7 @@ app.get('/api/cliente/:id/lojas', async (req, res) => {
   try {
     const {id} = req.params;
     const result = await pool.query(
-      `SELECT e.id, e.nome_empresa, e.cidade, e.estado, e.horario_funcionamento, ce.data_vinculo
+      `SELECT e.id, e.nome_empresa, e.cidade, e.estado, e.horario_funcionamento, e.telefone, ce.data_vinculo
        FROM cliente_empresa ce JOIN empresas e ON e.id = ce.empresa_id
        WHERE ce.cliente_id = $1 AND ce.status = 'ativo' ORDER BY ce.data_vinculo DESC`, [id]
     );
