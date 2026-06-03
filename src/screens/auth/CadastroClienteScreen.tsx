@@ -41,8 +41,14 @@ function maskData(value: string): string {
   return digits.replace(/(\d{2})(\d)/, '$1/$2').replace(/(\d{2})(\d)/, '$1/$2');
 }
 
+function maskCep(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  return digits.replace(/(\d{5})(\d)/, '$1-$2');
+}
+
 export default function CadastroClienteScreen({navigation}: Props) {
   const {show} = useAlert();
+
   const [nome, setNome] = useState('');
   const [cpf, setCpf] = useState('');
   const [cnpj, setCnpj] = useState('');
@@ -56,6 +62,20 @@ export default function CadastroClienteScreen({navigation}: Props) {
   const [senha, setSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const buscarCep = async (cepValue: string) => {
+    const digits = cepValue.replace(/\D/g, '');
+    if (digits.length !== 8) return;
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        setEndereco(data.logradouro || '');
+        setCidade(data.localidade || '');
+        setEstado(data.uf || '');
+      }
+    } catch {}
+  };
 
   const handleCadastro = async () => {
     if (!nome || !cpf || !email || !telefone || !senha) {
@@ -133,7 +153,7 @@ export default function CadastroClienteScreen({navigation}: Props) {
           <Text style={s.sectionTitle}>Endereço</Text>
 
           <Text style={s.label}>CEP</Text>
-          <TextInput style={s.input} value={cep} onChangeText={setCep} placeholder="00000-000" placeholderTextColor={Colors.gray} keyboardType="numeric" />
+          <TextInput style={s.input} value={cep} onChangeText={v => { const masked = maskCep(v); setCep(masked); buscarCep(masked); }} placeholder="00000-000" placeholderTextColor={Colors.gray} keyboardType="numeric" />
 
           <Text style={s.label}>Endereço</Text>
           <TextInput style={s.input} value={endereco} onChangeText={setEndereco} placeholder="Rua, número" placeholderTextColor={Colors.gray} />

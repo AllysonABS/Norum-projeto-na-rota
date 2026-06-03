@@ -18,6 +18,24 @@ function maskCpf(value: string): string {
     .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
 }
 
+function maskTelefone(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length <= 10) {
+    return digits.replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{4})(\d)/, '$1-$2');
+  }
+  return digits.replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2');
+}
+
+function maskCep(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  return digits.replace(/(\d{5})(\d)/, '$1-$2');
+}
+
+function maskData(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  return digits.replace(/(\d{2})(\d)/, '$1/$2').replace(/(\d{2})(\d)/, '$1/$2');
+}
+
 export default function PerfilScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {showToast} = useToast();
@@ -25,6 +43,22 @@ export default function PerfilScreen() {
   const {show} = useAlert();
   const [modalEditar, setModalEditar] = useState(false);
   const [totalLojas, setTotalLojas] = useState(0);
+
+  const buscarCep = async (cepValue: string) => {
+    const digits = cepValue.replace(/\D/g, '');
+    if (digits.length !== 8) return;
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        setFormEndereco(data.logradouro || '');
+        setFormBairro(data.bairro || '');
+        setFormCidade(data.localidade || '');
+        setFormEstado(data.uf || '');
+        setFormComplemento(data.complemento || '');
+      }
+    } catch {}
+  };
 
   useFocusEffect(useCallback(() => {
     if (cliente?.id) {
@@ -40,6 +74,9 @@ export default function PerfilScreen() {
   const [formEmail, setFormEmail] = useState('');
   const [formNascimento, setFormNascimento] = useState('');
   const [formEndereco, setFormEndereco] = useState('');
+  const [formNumero, setFormNumero] = useState('');
+  const [formBairro, setFormBairro] = useState('');
+  const [formComplemento, setFormComplemento] = useState('');
   const [formCidade, setFormCidade] = useState('');
   const [formEstado, setFormEstado] = useState('');
   const [formCep, setFormCep] = useState('');
@@ -50,15 +87,19 @@ export default function PerfilScreen() {
   const email = cliente?.email || '';
   const dataNascimento = cliente?.data_nascimento || '';
   const endereco = cliente?.endereco || '';
+  const numero = cliente?.numero || '';
+  const bairro = cliente?.bairro || '';
+  const complemento = cliente?.complemento || '';
   const cidade = cliente?.cidade || '';
   const estado = cliente?.estado || '';
   const cep = cliente?.cep || '';
 
-  const enderecoCompleto = endereco && cidade ? `${endereco} - ${cidade}/${estado}` : 'Não informado';
+  const enderecoCompleto = endereco ? `${endereco}${numero ? ', ' + numero : ''}${bairro ? ' - ' + bairro : ''}${complemento ? ' (' + complemento + ')' : ''}` : 'Não informado';
 
   const abrirEditar = () => {
     setFormNome(nome); setFormTelefone(telefone); setFormEmail(email);
     setFormNascimento(dataNascimento); setFormEndereco(endereco);
+    setFormNumero(numero); setFormBairro(bairro); setFormComplemento(complemento);
     setFormCidade(cidade); setFormEstado(estado); setFormCep(cep);
     setModalEditar(true);
   };
@@ -70,12 +111,14 @@ export default function PerfilScreen() {
     const res = await atualizarCliente(cliente.id, {
       nome: formNome, telefone: formTelefone, email: formEmail,
       data_nascimento: formNascimento, endereco: formEndereco,
+      numero: formNumero, bairro: formBairro, complemento: formComplemento,
       cidade: formCidade, estado: formEstado, cep: formCep,
     });
 
     if (res.success) {
       setCliente({...cliente, nome: formNome, telefone: formTelefone, email: formEmail,
         data_nascimento: formNascimento, endereco: formEndereco,
+        numero: formNumero, bairro: formBairro, complemento: formComplemento,
         cidade: formCidade, estado: formEstado, cep: formCep});
       setModalEditar(false);
       showToast('Perfil atualizado!', 'success');
@@ -118,7 +161,7 @@ export default function PerfilScreen() {
               <Text style={s.editBtn}>✏️ Editar</Text>
             </TouchableOpacity>
           </View>
-          <View style={s.row}><Text style={s.rowLabel}>Telefone</Text><Text style={s.rowValue}>{telefone || '—'}</Text></View>
+          <View style={s.row}><Text style={s.rowLabel}>Telefone</Text><Text style={s.rowValue}>{telefone ? maskTelefone(telefone) : '—'}</Text></View>
           <View style={s.row}><Text style={s.rowLabel}>E-mail</Text><Text style={s.rowValue}>{email || '—'}</Text></View>
           <View style={s.row}><Text style={s.rowLabel}>Nascimento</Text><Text style={s.rowValue}>{dataNascimento || '—'}</Text></View>
         </View>
@@ -127,7 +170,8 @@ export default function PerfilScreen() {
         <View style={s.section}>
           <Text style={s.sectionTitle}>Endereço</Text>
           <View style={s.row}><Text style={s.rowLabel}>CEP</Text><Text style={s.rowValue}>{cep || '—'}</Text></View>
-          <View style={[s.row, {borderBottomWidth: 0}]}><Text style={s.rowLabel}>Endereço</Text><Text style={s.rowValue}>{enderecoCompleto}</Text></View>
+          <View style={s.row}><Text style={s.rowLabel}>Endereço</Text><Text style={s.rowValue}>{enderecoCompleto}</Text></View>
+          <View style={[s.row, {borderBottomWidth: 0}]}><Text style={s.rowLabel}>Cidade/UF</Text><Text style={s.rowValue}>{cidade && estado ? `${cidade}/${estado}` : '—'}</Text></View>
         </View>
 
         {/* Opções */}
@@ -162,13 +206,25 @@ export default function PerfilScreen() {
               <Text style={s.label}>E-mail</Text>
               <TextInput style={s.input} value={formEmail} onChangeText={setFormEmail} placeholderTextColor={Colors.gray} keyboardType="email-address" autoCapitalize="none" />
               <Text style={s.label}>Data de Nascimento</Text>
-              <TextInput style={s.input} value={formNascimento} onChangeText={setFormNascimento} placeholderTextColor={Colors.gray} />
+              <TextInput style={s.input} value={formNascimento} onChangeText={v => setFormNascimento(maskData(v))} placeholderTextColor={Colors.gray} placeholder="DD/MM/AAAA" keyboardType="numeric" />
 
               <Text style={s.labelSection}>Endereço</Text>
               <Text style={s.label}>CEP</Text>
-              <TextInput style={s.input} value={formCep} onChangeText={setFormCep} placeholderTextColor={Colors.gray} keyboardType="numeric" />
-              <Text style={s.label}>Endereço</Text>
+              <TextInput style={s.input} value={formCep} onChangeText={v => { const masked = maskCep(v); setFormCep(masked); buscarCep(masked); }} placeholderTextColor={Colors.gray} placeholder="00000-000" keyboardType="numeric" />
+              <Text style={s.label}>Rua / Avenida</Text>
               <TextInput style={s.input} value={formEndereco} onChangeText={setFormEndereco} placeholderTextColor={Colors.gray} />
+              <View style={s.formRow}>
+                <View style={{flex: 1}}>
+                  <Text style={s.label}>Número</Text>
+                  <TextInput style={s.input} value={formNumero} onChangeText={setFormNumero} placeholderTextColor={Colors.gray} keyboardType="numeric" />
+                </View>
+                <View style={{flex: 2, marginLeft: 12}}>
+                  <Text style={s.label}>Bairro</Text>
+                  <TextInput style={s.input} value={formBairro} onChangeText={setFormBairro} placeholderTextColor={Colors.gray} />
+                </View>
+              </View>
+              <Text style={s.label}>Complemento</Text>
+              <TextInput style={s.input} value={formComplemento} onChangeText={setFormComplemento} placeholderTextColor={Colors.gray} placeholder="Apt, bloco, etc." />
               <View style={s.formRow}>
                 <View style={{flex: 2}}>
                   <Text style={s.label}>Cidade</Text>

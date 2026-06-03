@@ -83,6 +83,9 @@ export type ClienteData = {
   telefone: string;
   data_nascimento?: string;
   endereco?: string;
+  numero?: string;
+  bairro?: string;
+  complemento?: string;
   cidade?: string;
   estado?: string;
   cep?: string;

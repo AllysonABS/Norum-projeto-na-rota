@@ -136,7 +136,7 @@ app.post('/api/login-unificado', async (req, res) => {
           cliente: {
             id: cliente.id, nome: cliente.nome, cpf: cliente.cpf, cnpj: cliente.cnpj || '',
             email: cliente.email, telefone: cliente.telefone, data_nascimento: cliente.data_nascimento || '',
-            endereco: cliente.endereco || '', cidade: cliente.cidade || '', estado: cliente.estado || '', cep: cliente.cep || '',
+            endereco: cliente.endereco || '', numero: cliente.numero || '', bairro: cliente.bairro || '', complemento: cliente.complemento || '', cidade: cliente.cidade || '', estado: cliente.estado || '', cep: cliente.cep || '',
             data_cadastro: cliente.data_cadastro || '',
           },
         });
@@ -241,10 +241,10 @@ app.put('/api/empresa/:id', async (req, res) => {
 app.put('/api/cliente/:id', async (req, res) => {
   try {
     const {id} = req.params;
-    const {nome, telefone, email, data_nascimento, endereco, cidade, estado, cep} = req.body;
+    const {nome, telefone, email, data_nascimento, endereco, numero, bairro, complemento, cidade, estado, cep} = req.body;
     await pool.query(
-      `UPDATE clientes SET nome=$1, telefone=$2, email=$3, data_nascimento=$4, endereco=$5, cidade=$6, estado=$7, cep=$8 WHERE id=$9`,
-      [nome, telefone, email, data_nascimento || null, endereco || null, cidade || null, estado || null, cep || null, id]
+      `UPDATE clientes SET nome=$1, telefone=$2, email=$3, data_nascimento=$4, endereco=$5, numero=$6, bairro=$7, complemento=$8, cidade=$9, estado=$10, cep=$11 WHERE id=$12`,
+      [nome, telefone, email, data_nascimento || null, endereco || null, numero || null, bairro || null, complemento || null, cidade || null, estado || null, cep || null, id]
     );
     res.json({success: true});
   } catch (err: any) {
@@ -764,7 +764,7 @@ app.post('/api/login-cliente', async (req, res) => {
       cliente: {
         id: cliente.id, nome: cliente.nome, cpf: cliente.cpf, cnpj: cliente.cnpj || '',
         email: cliente.email, telefone: cliente.telefone, data_nascimento: cliente.data_nascimento || '',
-        endereco: cliente.endereco || '', cidade: cliente.cidade || '', estado: cliente.estado || '', cep: cliente.cep || '',
+        endereco: cliente.endereco || '', numero: cliente.numero || '', bairro: cliente.bairro || '', complemento: cliente.complemento || '', cidade: cliente.cidade || '', estado: cliente.estado || '', cep: cliente.cep || '',
         data_cadastro: cliente.data_cadastro || '',
       },
     });
