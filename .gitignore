@@ -71,3 +71,6 @@ Gemfile.lock
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Firebase
+web/server/firebase-service-account.json

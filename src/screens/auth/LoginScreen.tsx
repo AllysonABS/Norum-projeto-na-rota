@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
 import {loginEmpresa, loginCliente, loginDespachante} from '../../services/api';
@@ -76,11 +77,26 @@ function maskCpfCnpj(value: string): string {
     .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
 }
 
+const STORAGE_KEY = '@narota_credentials';
+
 export default function LoginScreen({navigation}: Props) {
   const [cpfCnpj, setCpfCnpj] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [lembrar, setLembrar] = useState(false);
   const [loading, setLoading] = useState(false);
   const {setEmpresa, setCliente, setDespachante} = useAuth();
+
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEY).then(data => {
+      if (data) {
+        const {cpfCnpj: saved, password: savedPwd} = JSON.parse(data);
+        setCpfCnpj(saved);
+        setPassword(savedPwd);
+        setLembrar(true);
+      }
+    });
+  }, []);
 
   const handleLogin = async () => {
     if (!cpfCnpj || !password) {
@@ -96,6 +112,13 @@ export default function LoginScreen({navigation}: Props) {
         loginDespachante(doc, password),
         loginCliente(doc, password),
       ]);
+
+      // Salva ou remove credenciais
+      if (lembrar) {
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({cpfCnpj, password}));
+      } else {
+        await AsyncStorage.removeItem(STORAGE_KEY);
+      }
 
       if (resEmpresa.success && resEmpresa.empresa) {
         setEmpresa(resEmpresa.empresa);
@@ -147,19 +170,32 @@ export default function LoginScreen({navigation}: Props) {
 
           <View style={styles.inputWrapper}>
             <Text style={styles.label}>Senha</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="••••••••"
-              placeholderTextColor={Colors.gray}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
+            <View style={styles.passwordRow}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="••••••••"
+                placeholderTextColor={Colors.gray}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+              />
+              <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)}>
+                <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
-          <TouchableOpacity style={styles.forgotButton} onPress={() => navigation.navigate('EsqueceuSenha')}>
-            <Text style={styles.forgotText}>Esqueceu a senha?</Text>
-          </TouchableOpacity>
+          <View style={styles.optionsRow}>
+            <TouchableOpacity style={styles.lembrarRow} onPress={() => setLembrar(!lembrar)}>
+              <View style={[styles.checkbox, lembrar && styles.checkboxOn]}>
+                {lembrar && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+              <Text style={styles.lembrarText}>Lembrar-se</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('EsqueceuSenha')}>
+              <Text style={styles.forgotText}>Esqueceu a senha?</Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={[styles.loginButton, loading && styles.loginButtonDisabled]}
@@ -226,7 +262,44 @@ const styles = StyleSheet.create({
     color: Colors.matriz,
     backgroundColor: Colors.grayLight,
   },
-  forgotButton: {alignSelf: 'flex-end', marginBottom: 20, marginTop: 2},
+  passwordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: Colors.grayBorder,
+    borderRadius: 8,
+    backgroundColor: Colors.grayLight,
+    height: 50,
+  },
+  passwordInput: {
+    flex: 1,
+    height: 50,
+    paddingHorizontal: 16,
+    fontSize: 15,
+    color: Colors.matriz,
+  },
+  eyeBtn: {paddingHorizontal: 14},
+  eyeIcon: {fontSize: 18},
+  optionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    marginTop: 4,
+  },
+  lembrarRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: Colors.grayBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxOn: {backgroundColor: Colors.pulso, borderColor: Colors.pulso},
+  checkmark: {color: Colors.white, fontSize: 12, fontWeight: '800'},
+  lembrarText: {fontSize: 13, color: Colors.matriz, fontWeight: '500'},
   forgotText: {fontSize: 13, color: Colors.pulso, fontWeight: '600'},
   loginButton: {
     height: 52,

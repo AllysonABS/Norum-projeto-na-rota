@@ -5,29 +5,25 @@ import { fileURLToPath } from 'url';
 import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
 import admin from 'firebase-admin';
+import { readFileSync, existsSync } from 'fs';
 
 // Inicializa Firebase Admin
-const firebaseServiceAccount = {
-  type: 'service_account',
-  project_id: 'na-rota-norum',
-  private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID || '',
-  private_key: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
-  client_email: process.env.FIREBASE_CLIENT_EMAIL || '',
-  client_id: process.env.FIREBASE_CLIENT_ID || '',
-  auth_uri: 'https://accounts.google.com/o/oauth2/auth',
-  token_uri: 'https://oauth2.googleapis.com/token',
-} as admin.ServiceAccount;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const firebaseKeyPath = path.join(__dirname, 'firebase-service-account.json');
 
-admin.initializeApp({
-  credential: admin.credential.cert(firebaseServiceAccount),
-});
+if (existsSync(firebaseKeyPath)) {
+  const serviceAccount = JSON.parse(readFileSync(firebaseKeyPath, 'utf8'));
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+} else {
+  console.warn('Firebase service account not found, push notifications disabled.');
+}
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const pool = new Pool({
   host: process.env.DB_HOST,
@@ -292,13 +288,15 @@ app.post('/api/cliente/:clienteId/vincular/:empresaId', async (req, res) => {
     );
     // Envia push notification
     try {
-      const tokens = await pool.query('SELECT token FROM empresa_fcm_tokens WHERE empresa_id=$1', [empresaId]);
-      if (tokens.rows.length > 0) {
-        await admin.messaging().sendEachForMulticast({
-          tokens: tokens.rows.map((r: any) => r.token),
-          notification: { title: 'Novo cliente vinculado', body: `${nome} se vinculou à sua loja.` },
-          data: { tipo: 'novo_vinculo', cliente_id: clienteId },
-        });
+      if (admin.apps.length > 0) {
+        const tokens = await pool.query('SELECT token FROM empresa_fcm_tokens WHERE empresa_id=$1', [empresaId]);
+        if (tokens.rows.length > 0) {
+          await admin.messaging().sendEachForMulticast({
+            tokens: tokens.rows.map((r: any) => r.token),
+            notification: { title: 'Novo cliente vinculado', body: `${nome} se vinculou à sua loja.` },
+            data: { tipo: 'novo_vinculo', cliente_id: clienteId },
+          });
+        }
       }
     } catch (pushErr) { console.error('Erro ao enviar push:', pushErr); }
     res.json({success: true});
