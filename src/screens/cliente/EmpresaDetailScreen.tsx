@@ -1,18 +1,9 @@
-import React, {useState} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Linking} from 'react-native';
+import React, {useState, useEffect} from 'react';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Linking, ActivityIndicator} from 'react-native';
 import {Colors} from '../../theme/colors';
 import StatusBadge from '../../components/StatusBadge';
 import {useAuth} from '../../context/AuthContext';
-import {desvincularLoja} from '../../services/api';
-
-type Status = 'aguardando' | 'em_transito' | 'entregue' | 'cancelado';
-
-const pedidosMock = [
-  {id: '#0138', excursao: 'SP - Lote A', status: 'em_transito' as Status, data: '12 Jun', timeline: [{hora: '08:00', evento: 'Pedido recebido'}, {hora: '09:30', evento: 'Coletado pelo despachante'}, {hora: '11:15', evento: 'Em rota para excursão'}]},
-  {id: '#0125', excursao: 'BH - Lote A', status: 'aguardando' as Status, data: '11 Jun', timeline: [{hora: '06:00', evento: 'Pedido recebido'}]},
-  {id: '#0119', excursao: 'RJ - Lote C', status: 'entregue' as Status, data: '09 Jun', timeline: [{hora: '07:00', evento: 'Pedido recebido'}, {hora: '08:45', evento: 'Coletado'}, {hora: '10:00', evento: 'Entregue'}]},
-  {id: '#0102', excursao: 'SP - Lote B', status: 'entregue' as Status, data: '05 Jun', timeline: [{hora: '06:30', evento: 'Pedido recebido'}, {hora: '09:00', evento: 'Coletado'}, {hora: '11:30', evento: 'Entregue'}]},
-];
+import {desvincularLoja, listarPedidosCliente, PedidoData} from '../../services/api';
 
 export default function EmpresaDetailScreen({route, navigation}: any) {
   const {empresa} = route.params;
@@ -21,14 +12,29 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
   const cor = empresa.cor || Colors.pulso;
   const cidadeEstado = empresa.cidade && empresa.estado ? `${empresa.cidade}, ${empresa.estado}` : empresa.cidade || 'Não informado';
   const horario = empresa.horario_funcionamento || empresa.horario || '';
-  const [selecionado, setSelecionado] = useState<typeof pedidosMock[0] | null>(null);
+  const [selecionado, setSelecionado] = useState<PedidoData | null>(null);
   const [modalDesvincular, setModalDesvincular] = useState(false);
+  const [pedidos, setPedidos] = useState<PedidoData[]>([]);
+  const [loadingPedidos, setLoadingPedidos] = useState(true);
+
+  useEffect(() => {
+    if (cliente?.id) {
+      listarPedidosCliente(cliente.id).then(res => {
+        if (res.success && res.pedidos) {
+          setPedidos(res.pedidos.filter(p => p.empresa_id === empresa.id));
+        }
+        setLoadingPedidos(false);
+      });
+    } else {
+      setLoadingPedidos(false);
+    }
+  }, [cliente?.id, empresa.id]);
 
   const stats = [
-    {label: 'Total', value: pedidosMock.length, color: Colors.clareza},
-    {label: 'Em trânsito', value: pedidosMock.filter(p => p.status === 'em_transito').length, color: Colors.pulso},
-    {label: 'Aguardando', value: pedidosMock.filter(p => p.status === 'aguardando').length, color: '#F59E0B'},
-    {label: 'Entregues', value: pedidosMock.filter(p => p.status === 'entregue').length, color: '#86EFAC'},
+    {label: 'Total', value: pedidos.length, color: Colors.clareza},
+    {label: 'Em trânsito', value: pedidos.filter(p => p.status === 'em_transito').length, color: Colors.pulso},
+    {label: 'Aguardando', value: pedidos.filter(p => p.status === 'aguardando').length, color: '#F59E0B'},
+    {label: 'Entregues', value: pedidos.filter(p => p.status === 'entregue').length, color: '#86EFAC'},
   ];
 
   const ligar = () => {
@@ -41,17 +47,11 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
     if (num.length > 2) Linking.openURL(`https://wa.me/${num}`);
   };
 
-  const handleDesvincular = () => {
-    setModalDesvincular(true);
-  };
-
   const confirmarDesvincular = async () => {
     if (!cliente?.id) return;
     const res = await desvincularLoja(cliente.id, empresa.id);
     setModalDesvincular(false);
-    if (res.success) {
-      navigation.goBack();
-    }
+    if (res.success) navigation.goBack();
   };
 
   return (
@@ -63,7 +63,6 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
           </TouchableOpacity>
         </View>
 
-        {/* Hero */}
         <View style={s.hero}>
           <View style={[s.avatar, {backgroundColor: cor + '22'}]}>
             <Text style={[s.avatarText, {color: cor}]}>{nome[0]}</Text>
@@ -84,7 +83,6 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
           </View>
         </View>
 
-        {/* Botões de contato */}
         <View style={s.contatoRow}>
           <TouchableOpacity style={s.contatoBtn} onPress={whatsapp}>
             <Text style={s.contatoIcon}>💬</Text>
@@ -96,7 +94,6 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
           </TouchableOpacity>
         </View>
 
-        {/* Stats */}
         <View style={s.statsRow}>
           {stats.map((st, i) => (
             <View key={i} style={s.statCard}>
@@ -106,28 +103,32 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
           ))}
         </View>
 
-        {/* Pedidos */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>Pedidos nesta loja</Text>
-          <View style={s.pedidosList}>
-            {pedidosMock.map(p => (
-              <TouchableOpacity key={p.id} style={s.pedidoCard} activeOpacity={0.8} onPress={() => setSelecionado(p)}>
-                <View style={s.pedidoLeft}>
-                  <View style={s.pedidoIdRow}>
-                    <Text style={s.pedidoId}>{p.id}</Text>
-                    <Text style={s.pedidoData}>{p.data}</Text>
+          {loadingPedidos ? (
+            <ActivityIndicator color={Colors.pulso} style={{marginTop: 20}} />
+          ) : pedidos.length === 0 ? (
+            <Text style={s.emptyText}>Nenhum pedido nesta loja</Text>
+          ) : (
+            <View style={s.pedidosList}>
+              {pedidos.map(p => (
+                <TouchableOpacity key={p.id} style={s.pedidoCard} activeOpacity={0.8} onPress={() => setSelecionado(p)}>
+                  <View style={s.pedidoLeft}>
+                    <View style={s.pedidoIdRow}>
+                      <Text style={s.pedidoId}>#{p.numero}</Text>
+                      <Text style={s.pedidoData}>{new Date(p.criado_em).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}</Text>
+                    </View>
+                    <Text style={s.pedidoExcursao}>{p.excursao_nome}</Text>
                   </View>
-                  <Text style={s.pedidoExcursao}>{p.excursao}</Text>
-                </View>
-                <StatusBadge status={p.status} />
-              </TouchableOpacity>
-            ))}
-          </View>
+                  <StatusBadge status={p.status} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
 
-        {/* Botão desvincular */}
         <View style={s.section}>
-          <TouchableOpacity style={s.desvincularBtn} onPress={handleDesvincular}>
+          <TouchableOpacity style={s.desvincularBtn} onPress={() => setModalDesvincular(true)}>
             <Text style={s.desvincularText}>Desvincular desta loja</Text>
           </TouchableOpacity>
         </View>
@@ -161,22 +162,22 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
             <View style={s.sheetHandle} />
             <View style={s.sheetHeader}>
               <View>
-                <Text style={s.sheetId}>{selecionado?.id}</Text>
-                <Text style={s.sheetSub}>{nome} · {selecionado?.excursao}</Text>
+                <Text style={s.sheetId}>#{selecionado?.numero}</Text>
+                <Text style={s.sheetSub}>{nome} · {selecionado?.excursao_nome}</Text>
               </View>
               {selecionado && <StatusBadge status={selecionado.status} />}
             </View>
 
             <Text style={s.timelineTitle}>Histórico</Text>
-            {selecionado?.timeline.map((t, i) => (
-              <View key={i} style={s.timelineItem}>
+            {selecionado?.etapas?.map((t, i) => (
+              <View key={t.id} style={s.timelineItem}>
                 <View style={s.timelineLine}>
-                  <View style={[s.timelineDot, i === 0 && {backgroundColor: Colors.pulso}]} />
-                  {i < (selecionado.timeline.length - 1) && <View style={s.timelineBar} />}
+                  <View style={[s.timelineDot, t.concluida && {backgroundColor: Colors.pulso}]} />
+                  {i < (selecionado.etapas?.length ?? 0) - 1 && <View style={s.timelineBar} />}
                 </View>
                 <View style={s.timelineText}>
-                  <Text style={s.timelineHora}>{t.hora}</Text>
-                  <Text style={s.timelineEvento}>{t.evento}</Text>
+                  {t.hora && <Text style={s.timelineHora}>{new Date(t.hora).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</Text>}
+                  <Text style={s.timelineEvento}>{t.nome}</Text>
                 </View>
               </View>
             ))}
@@ -196,7 +197,6 @@ const s = StyleSheet.create({
   topBar: {paddingHorizontal: 20, paddingTop: 56},
   backBtn: {width: 40, height: 40, borderRadius: 12, backgroundColor: '#162433', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#1E3448'},
   backText: {fontSize: 20, color: Colors.clareza},
-
   hero: {alignItems: 'center', paddingTop: 20, paddingBottom: 20},
   avatar: {width: 80, height: 80, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 16},
   avatarText: {fontSize: 36, fontWeight: '800'},
@@ -206,19 +206,17 @@ const s = StyleSheet.create({
   pill: {flexDirection: 'row', alignItems: 'center', backgroundColor: '#162433', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, gap: 6, borderWidth: 1, borderColor: '#1E3448'},
   pillIcon: {fontSize: 14},
   pillText: {fontSize: 12, color: Colors.clareza, fontWeight: '500'},
-
   contatoRow: {flexDirection: 'row', gap: 12, paddingHorizontal: 20, marginBottom: 20},
   contatoBtn: {flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.pulso + '20', borderRadius: 10, paddingVertical: 14, borderWidth: 1, borderColor: Colors.pulso},
   contatoIcon: {fontSize: 18},
   contatoText: {fontSize: 14, fontWeight: '700', color: Colors.pulso},
-
   statsRow: {flexDirection: 'row', paddingHorizontal: 20, gap: 8, marginBottom: 28},
   statCard: {flex: 1, backgroundColor: '#162433', borderRadius: 14, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#1E3448'},
   statValue: {fontSize: 22, fontWeight: '800'},
   statLabel: {fontSize: 10, color: Colors.gray, marginTop: 4, fontWeight: '600', textTransform: 'uppercase'},
-
   section: {paddingHorizontal: 20, paddingBottom: 40},
   sectionTitle: {fontSize: 13, color: Colors.gray, textTransform: 'uppercase', letterSpacing: 1.5, fontWeight: '600', marginBottom: 14},
+  emptyText: {fontSize: 14, color: Colors.gray, textAlign: 'center', marginTop: 10},
   pedidosList: {gap: 10},
   pedidoCard: {backgroundColor: '#162433', borderRadius: 12, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#1E3448'},
   pedidoLeft: {flex: 1, marginRight: 12},
@@ -226,7 +224,6 @@ const s = StyleSheet.create({
   pedidoId: {fontSize: 16, fontWeight: '700', color: Colors.clareza},
   pedidoData: {fontSize: 11, color: Colors.gray, backgroundColor: '#1E3448', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6},
   pedidoExcursao: {fontSize: 12, color: '#60A5FA', marginTop: 4},
-
   overlay: {flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end'},
   overlayCenter: {flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center'},
   sheet: {backgroundColor: '#0F1F2E', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: 40},

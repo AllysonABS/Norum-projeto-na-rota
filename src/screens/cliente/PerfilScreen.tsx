@@ -7,7 +7,7 @@ import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
 import Toast, {useToast} from '../../components/Toast';
 import {useAuth} from '../../context/AuthContext';
-import {atualizarCliente, listarMinhasLojas, alterarSenhaCliente} from '../../services/api';
+import {atualizarCliente, listarMinhasLojas, alterarSenhaCliente, listarPedidosCliente} from '../../services/api';
 import {useAlert} from '../../components/CustomAlert';
 
 function maskCpf(value: string): string {
@@ -44,6 +44,7 @@ export default function PerfilScreen() {
   const [modalEditar, setModalEditar] = useState(false);
   const [modalSenha, setModalSenha] = useState(false);
   const [totalLojas, setTotalLojas] = useState(0);
+  const [totalPedidos, setTotalPedidos] = useState(0);
   const [senhaAtual, setSenhaAtual] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmarNovaSenha, setConfirmarNovaSenha] = useState('');
@@ -69,6 +70,9 @@ export default function PerfilScreen() {
     if (cliente?.id) {
       listarMinhasLojas(cliente.id).then(res => {
         if (res.success && res.lojas) setTotalLojas(res.lojas.length);
+      });
+      listarPedidosCliente(cliente.id).then(res => {
+        if (res.success && res.pedidos) setTotalPedidos(res.pedidos.length);
       });
     }
   }, [cliente?.id]));
@@ -168,7 +172,7 @@ export default function PerfilScreen() {
         {/* Resumo de atividade */}
         <View style={s.resumoRow}>
           <View style={s.resumoCard}>
-            <Text style={s.resumoValor}>0</Text>
+            <Text style={s.resumoValor}>{totalPedidos}</Text>
             <Text style={s.resumoLabel}>Pedidos</Text>
           </View>
           <View style={s.resumoCard}>

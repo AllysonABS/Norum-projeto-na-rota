@@ -248,6 +248,97 @@ export async function cadastrarClienteManual(empresaId: string, dados: {
   }
 }
 
+// === PEDIDOS ===
+
+export type PedidoEtapa = {id: string; nome: string; concluida: boolean; hora: string | null; ordem: number};
+export type PedidoFoto = {id: string; url: string; etapa: string; criado_em: string};
+
+export type PedidoData = {
+  id: string;
+  numero?: number;
+  empresa_id: string;
+  cliente_id: string | null;
+  despachante_id: string | null;
+  excursao_id: string | null;
+  cliente_nome: string;
+  despachante_nome: string;
+  excursao_nome: string;
+  volumes: number;
+  descricao: string | null;
+  status: 'aguardando' | 'em_transito' | 'entregue';
+  criado_em: string;
+  atualizado_em: string;
+  etapas: PedidoEtapa[] | null;
+  fotos: PedidoFoto[] | null;
+  nome_empresa?: string;
+};
+
+export async function criarPedido(empresaId: string, dados: {
+  cliente_id?: string; despachante_id?: string; excursao_id?: string;
+  cliente_nome: string; despachante_nome: string; excursao_nome: string;
+  volumes: number; descricao?: string;
+}): Promise<{success: boolean; pedido_id?: string; error?: string}> {
+  try {
+    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/pedidos`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(dados),
+    });
+    return await res.json();
+  } catch {
+    return {success: false, error: 'Erro de conexão com o servidor.'};
+  }
+}
+
+export async function listarPedidosEmpresa(empresaId: string): Promise<{success: boolean; pedidos?: PedidoData[]; error?: string}> {
+  try {
+    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/pedidos`);
+    return await res.json();
+  } catch {
+    return {success: false, error: 'Erro de conexão com o servidor.'};
+  }
+}
+
+export async function listarPedidosCliente(clienteId: string): Promise<{success: boolean; pedidos?: PedidoData[]; error?: string}> {
+  try {
+    const res = await fetch(`${API_URL}/api/cliente/${clienteId}/pedidos`);
+    return await res.json();
+  } catch {
+    return {success: false, error: 'Erro de conexão com o servidor.'};
+  }
+}
+
+export async function listarPedidosDespachante(despachanteId: string): Promise<{success: boolean; pedidos?: PedidoData[]; error?: string}> {
+  try {
+    const res = await fetch(`${API_URL}/api/despachante/${despachanteId}/pedidos`);
+    return await res.json();
+  } catch {
+    return {success: false, error: 'Erro de conexão com o servidor.'};
+  }
+}
+
+export async function atualizarStatusPedido(pedidoId: string, status: string): Promise<{success: boolean; error?: string}> {
+  try {
+    const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/status`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({status}),
+    });
+    return await res.json();
+  } catch {
+    return {success: false, error: 'Erro de conexão com o servidor.'};
+  }
+}
+
+export async function concluirEtapaPedido(pedidoId: string, etapaId: string): Promise<{success: boolean; error?: string}> {
+  try {
+    const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/etapas/${etapaId}/concluir`, {method: 'PUT'});
+    return await res.json();
+  } catch {
+    return {success: false, error: 'Erro de conexão com o servidor.'};
+  }
+}
+
 // === NOTIFICAÇÕES ===
 
 export type NotificacaoData = {

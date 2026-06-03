@@ -1,73 +1,13 @@
 import React, {useState, useCallback} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Image, RefreshControl} from 'react-native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Image, RefreshControl, ActivityIndicator} from 'react-native';
+import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import Toast, {useToast} from '../../components/Toast';
 import {useAlert} from '../../components/CustomAlert';
+import {useAuth} from '../../context/AuthContext';
+import {criarPedido, listarPedidosEmpresa, listarClientesEmpresa, listarDespachantes, listarExcursoes, PedidoData} from '../../services/api';
 
-type Etapa = {nome: string; concluida: boolean; hora?: string};
 type Status = 'aguardando' | 'em_transito' | 'entregue';
-
-type Pedido = {
-  id: string; cliente: string; despachante: string; excursao: string;
-  status: Status; etapas: Etapa[]; fotos: string[]; data: string; volumes: string; descricao: string;
-};
-
-const clientes = ['João Silva', 'Maria Santos', 'Carlos Melo', 'Ana Beatriz', 'Loja do Pedro'];
-const despachantes = ['Ricardo Gomes', 'Fernanda Lima', 'Paulo Mendes'];
-const excursoes = ['Trans Silva - SP (Setor A, Vaga 12)', 'Rápido Norte - RJ (Setor B, Vaga 07)', 'Sul Cargas - BH (Setor A, Vaga 23)'];
-
-const hoje = new Date().toLocaleDateString('pt-BR');
-
-const pedidosIniciais: Pedido[] = [
-  {
-    id: '#0138', cliente: 'João Silva', despachante: 'Ricardo Gomes',
-    excursao: 'Trans Silva - SP (Setor A, Vaga 12)', status: 'em_transito',
-    volumes: '3', descricao: 'Caixas de eletrônicos', data: hoje,
-    etapas: [
-      {nome: 'Pedido recebido', concluida: true, hora: '08:30'},
-      {nome: 'Coleta realizada', concluida: true, hora: '09:15'},
-      {nome: 'Em rota para excursão', concluida: true, hora: '09:45'},
-      {nome: 'Entregue na excursão', concluida: false},
-    ],
-    fotos: [],
-  },
-  {
-    id: '#0137', cliente: 'Maria Santos', despachante: 'Fernanda Lima',
-    excursao: 'Rápido Norte - RJ (Setor B, Vaga 07)', status: 'aguardando',
-    volumes: '1', descricao: 'Envelope documentos', data: hoje,
-    etapas: [
-      {nome: 'Pedido recebido', concluida: true, hora: '10:00'},
-      {nome: 'Coleta realizada', concluida: false},
-      {nome: 'Em rota para excursão', concluida: false},
-      {nome: 'Entregue na excursão', concluida: false},
-    ],
-    fotos: [],
-  },
-  {
-    id: '#0136', cliente: 'Carlos Melo', despachante: 'Ricardo Gomes',
-    excursao: 'Sul Cargas - BH (Setor A, Vaga 23)', status: 'entregue',
-    volumes: '5', descricao: 'Peças automotivas', data: hoje,
-    etapas: [
-      {nome: 'Pedido recebido', concluida: true, hora: '07:00'},
-      {nome: 'Coleta realizada', concluida: true, hora: '07:40'},
-      {nome: 'Em rota para excursão', concluida: true, hora: '08:10'},
-      {nome: 'Entregue na excursão', concluida: true, hora: '08:55'},
-    ],
-    fotos: ['https://via.placeholder.com/200', 'https://via.placeholder.com/200'],
-  },
-  {
-    id: '#0130', cliente: 'Ana Beatriz', despachante: 'Paulo Mendes',
-    excursao: 'Trans Silva - SP (Setor A, Vaga 12)', status: 'entregue',
-    volumes: '2', descricao: 'Roupas', data: '10/01/2025',
-    etapas: [
-      {nome: 'Pedido recebido', concluida: true, hora: '08:00'},
-      {nome: 'Coleta realizada', concluida: true, hora: '08:30'},
-      {nome: 'Em rota para excursão', concluida: true, hora: '09:00'},
-      {nome: 'Entregue na excursão', concluida: true, hora: '09:40'},
-    ],
-    fotos: ['https://via.placeholder.com/200'],
-  },
-];
 
 const statusConfig: Record<Status, {label: string; cor: string}> = {
   aguardando: {label: 'Aguardando', cor: '#F59E0B'},
@@ -83,82 +23,110 @@ const filtros: {label: string; value: Status | 'todos'}[] = [
 ];
 
 export default function PedidosScreen() {
-  const [pedidos, setPedidos] = useState<Pedido[]>(pedidosIniciais);
-  const [busca, setBusca] = useState('');
-  const [filtro, setFiltro] = useState<Status | 'todos'>('todos');
-  const [aba, setAba] = useState<'hoje' | 'historico'>('hoje');
-  const [detalhe, setDetalhe] = useState<Pedido | null>(null);
-  const [modalNovo, setModalNovo] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const {empresa} = useAuth();
   const {showToast} = useToast();
   const {show} = useAlert();
+  const [pedidos, setPedidos] = useState<PedidoData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busca, setBusca] = useState('');
+  const [filtro, setFiltro] = useState<Status | 'todos'>('todos');
+  const [detalhe, setDetalhe] = useState<PedidoData | null>(null);
+  const [modalNovo, setModalNovo] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Form novo pedido
-  const [novoCliente, setNovoCliente] = useState('');
-  const [novoDespachante, setNovoDespachante] = useState('');
-  const [novoExcursao, setNovoExcursao] = useState('');
+  // Dados para o formulário de criar pedido
+  const [clientes, setClientes] = useState<any[]>([]);
+  const [despachantes, setDespachantes] = useState<any[]>([]);
+  const [excursoes, setExcursoes] = useState<any[]>([]);
+  const [novoCliente, setNovoCliente] = useState<any>(null);
+  const [novoDespachante, setNovoDespachante] = useState<any>(null);
+  const [novoExcursao, setNovoExcursao] = useState<any>(null);
   const [novoVolumes, setNovoVolumes] = useState('');
   const [novoDescricao, setNovoDescricao] = useState('');
   const [showPickerCliente, setShowPickerCliente] = useState(false);
   const [showPickerDesp, setShowPickerDesp] = useState(false);
   const [showPickerExc, setShowPickerExc] = useState(false);
+  const [criando, setCriando] = useState(false);
 
-  const limparNovo = () => {
-    setNovoCliente(''); setNovoDespachante(''); setNovoExcursao('');
-    setNovoVolumes(''); setNovoDescricao('');
+  const carregar = async () => {
+    if (!empresa?.id) return;
+    const res = await listarPedidosEmpresa(empresa.id);
+    if (res.success && res.pedidos) setPedidos(res.pedidos);
   };
 
-  const criarPedido = () => {
-    if (!novoCliente || !novoDespachante || !novoExcursao || !novoVolumes) {
-      show({title: 'Atenção', message: 'Preencha os campos obrigatórios', type: 'warning'}); return;
-    }
-    const novo: Pedido = {
-      id: `#${String(Date.now()).slice(-4)}`,
-      cliente: novoCliente, despachante: novoDespachante, excursao: novoExcursao,
-      volumes: novoVolumes, descricao: novoDescricao, status: 'aguardando', data: hoje,
-      etapas: [
-        {nome: 'Pedido recebido', concluida: true, hora: new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})},
-        {nome: 'Coleta realizada', concluida: false},
-        {nome: 'Em rota para excursão', concluida: false},
-        {nome: 'Entregue na excursão', concluida: false},
-      ],
-      fotos: [],
-    };
-    setPedidos(prev => [novo, ...prev]);
-    limparNovo(); setModalNovo(false);
-    showToast('Pedido criado com sucesso!', 'success');
+  const carregarDadosForm = async () => {
+    if (!empresa?.id) return;
+    const [resCli, resDesp, resExc] = await Promise.all([
+      listarClientesEmpresa(empresa.id),
+      listarDespachantes(empresa.id),
+      listarExcursoes(empresa.id),
+    ]);
+    if (resCli.success && resCli.clientes) setClientes(resCli.clientes);
+    if (resDesp.success && resDesp.despachantes) setDespachantes(resDesp.despachantes);
+    if (resExc.success && resExc.excursoes) setExcursoes(resExc.excursoes);
   };
+
+  useFocusEffect(useCallback(() => {
+    setLoading(true);
+    carregar().finally(() => setLoading(false));
+  }, [empresa?.id]));
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => { setRefreshing(false); showToast('Atualizado', 'info'); }, 1000);
-  }, []);
+    carregar().finally(() => setRefreshing(false));
+  }, [empresa?.id]);
+
+  const abrirNovo = () => {
+    carregarDadosForm();
+    setNovoCliente(null); setNovoDespachante(null); setNovoExcursao(null);
+    setNovoVolumes(''); setNovoDescricao('');
+    setModalNovo(true);
+  };
+
+  const handleCriar = async () => {
+    if (!novoCliente || !novoDespachante || !novoExcursao || !novoVolumes) {
+      show({title: 'Atenção', message: 'Preencha os campos obrigatórios.', type: 'warning'}); return;
+    }
+    if (!empresa?.id) return;
+    setCriando(true);
+    const res = await criarPedido(empresa.id, {
+      cliente_id: novoCliente.cliente_id || undefined,
+      despachante_id: novoDespachante.id || undefined,
+      excursao_id: novoExcursao.id || undefined,
+      cliente_nome: novoCliente.nome,
+      despachante_nome: novoDespachante.nome,
+      excursao_nome: `${novoExcursao.nome} (Setor ${novoExcursao.setor}, Vaga ${novoExcursao.vaga})`,
+      volumes: parseInt(novoVolumes, 10),
+      descricao: novoDescricao || undefined,
+    });
+    setCriando(false);
+    if (res.success) {
+      showToast('Pedido criado com sucesso!', 'success');
+      setModalNovo(false);
+      carregar();
+    } else {
+      show({title: 'Erro', message: res.error || 'Falha ao criar pedido.', type: 'error'});
+    }
+  };
 
   const pedidosFiltrados = pedidos.filter(p => {
     const q = busca.toLowerCase();
-    const matchBusca = !q || p.id.includes(q) || p.cliente.toLowerCase().includes(q) || p.despachante.toLowerCase().includes(q);
+    const matchBusca = !q || p.cliente_nome.toLowerCase().includes(q) || p.despachante_nome.toLowerCase().includes(q) || p.excursao_nome.toLowerCase().includes(q);
     const matchFiltro = filtro === 'todos' || p.status === filtro;
-    const matchAba = aba === 'hoje' ? p.data === hoje : p.data !== hoje;
-    return matchBusca && matchFiltro && matchAba;
+    return matchBusca && matchFiltro;
   });
+
+  if (loading) {
+    return <View style={[s.container, {justifyContent: 'center', alignItems: 'center'}]}><ActivityIndicator size="large" color={Colors.pulso} /></View>;
+  }
 
   return (
     <View style={s.container}>
       <Toast />
       <View style={s.header}>
         <Text style={s.title}>Pedidos</Text>
-        <TouchableOpacity style={s.addBtn} onPress={() => setModalNovo(true)}>
+        <TouchableOpacity style={s.addBtn} onPress={abrirNovo}>
           <Text style={s.addBtnText}>+ Novo</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Abas hoje/histórico */}
-      <View style={s.abasRow}>
-        <TouchableOpacity style={[s.aba, aba === 'hoje' && s.abaAtiva]} onPress={() => setAba('hoje')}>
-          <Text style={[s.abaText, aba === 'hoje' && s.abaTextAtiva]}>Hoje</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[s.aba, aba === 'historico' && s.abaAtiva]} onPress={() => setAba('historico')}>
-          <Text style={[s.abaText, aba === 'historico' && s.abaTextAtiva]}>Histórico</Text>
         </TouchableOpacity>
       </View>
 
@@ -167,7 +135,6 @@ export default function PedidosScreen() {
         <TextInput style={s.searchInput} placeholder="Buscar pedido..." placeholderTextColor={Colors.gray} value={busca} onChangeText={setBusca} />
       </View>
 
-      {/* Filtros */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filtrosScroll} contentContainerStyle={s.filtrosRow}>
         {filtros.map(f => (
           <TouchableOpacity key={f.value} style={[s.filtroChip, filtro === f.value && s.filtroAtivo]} onPress={() => setFiltro(f.value)}>
@@ -181,27 +148,26 @@ export default function PedidosScreen() {
         contentContainerStyle={{padding: 24, paddingTop: 0, gap: 10}}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.pulso} />}
       >
-        {pedidosFiltrados.length === 0 && (
-          <Text style={s.empty}>Nenhum pedido encontrado</Text>
-        )}
+        {pedidosFiltrados.length === 0 && <Text style={s.empty}>Nenhum pedido encontrado</Text>}
         {pedidosFiltrados.map(p => {
           const cfg = statusConfig[p.status];
-          const progresso = p.etapas.filter(e => e.concluida).length;
+          const etapas = p.etapas || [];
+          const progresso = etapas.filter(e => e.concluida).length;
           return (
             <TouchableOpacity key={p.id} style={s.card} onPress={() => setDetalhe(p)} activeOpacity={0.7}>
               <View style={s.cardHeader}>
-                <Text style={s.pedidoId}>{p.id}</Text>
+                <Text style={s.pedidoId}>#{p.numero}</Text>
                 <View style={[s.badge, {backgroundColor: cfg.cor + '20'}]}>
                   <Text style={[s.badgeText, {color: cfg.cor}]}>{cfg.label}</Text>
                 </View>
               </View>
-              <Text style={s.cardCliente}>👤 {p.cliente}</Text>
-              <Text style={s.cardDesp}>🚚 {p.despachante} · {p.volumes} vol.</Text>
+              <Text style={s.cardCliente}>👤 {p.cliente_nome}</Text>
+              <Text style={s.cardDesp}>🚚 {p.despachante_nome} · {p.volumes} vol.</Text>
               <View style={s.progressRow}>
                 <View style={s.progressBg}>
-                  <View style={[s.progressFill, {width: `${(progresso / p.etapas.length) * 100}%`, backgroundColor: cfg.cor}]} />
+                  <View style={[s.progressFill, {width: `${(progresso / Math.max(etapas.length, 1)) * 100}%`, backgroundColor: cfg.cor}]} />
                 </View>
-                <Text style={s.progressLabel}>{progresso}/{p.etapas.length}</Text>
+                <Text style={s.progressLabel}>{progresso}/{etapas.length}</Text>
               </View>
             </TouchableOpacity>
           );
@@ -214,42 +180,30 @@ export default function PedidosScreen() {
           <View style={s.sheet}>
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={s.sheetHeader}>
-                <Text style={s.sheetTitle}>{detalhe?.id}</Text>
+                <Text style={s.sheetTitle}>#{detalhe?.numero}</Text>
                 {detalhe && (
                   <View style={[s.badge, {backgroundColor: statusConfig[detalhe.status].cor + '20'}]}>
                     <Text style={[s.badgeText, {color: statusConfig[detalhe.status].cor}]}>{statusConfig[detalhe.status].label}</Text>
                   </View>
                 )}
               </View>
-              <View style={s.detRow}><Text style={s.detLabel}>Cliente</Text><Text style={s.detValue}>{detalhe?.cliente}</Text></View>
-              <View style={s.detRow}><Text style={s.detLabel}>Despachante</Text><Text style={s.detValue}>{detalhe?.despachante}</Text></View>
-              <View style={s.detRow}><Text style={s.detLabel}>Excursão</Text><Text style={s.detValue}>{detalhe?.excursao}</Text></View>
+              <View style={s.detRow}><Text style={s.detLabel}>Cliente</Text><Text style={s.detValue}>{detalhe?.cliente_nome}</Text></View>
+              <View style={s.detRow}><Text style={s.detLabel}>Despachante</Text><Text style={s.detValue}>{detalhe?.despachante_nome}</Text></View>
+              <View style={s.detRow}><Text style={s.detLabel}>Excursão</Text><Text style={s.detValue}>{detalhe?.excursao_nome}</Text></View>
               <View style={s.detRow}><Text style={s.detLabel}>Volumes</Text><Text style={s.detValue}>{detalhe?.volumes}</Text></View>
               <View style={s.detRow}><Text style={s.detLabel}>Descrição</Text><Text style={s.detValue}>{detalhe?.descricao || '—'}</Text></View>
-              <View style={s.detRow}><Text style={s.detLabel}>Data</Text><Text style={s.detValue}>{detalhe?.data}</Text></View>
 
               <Text style={s.sectionTitle}>Progresso</Text>
-              {detalhe?.etapas.map((etapa, i) => (
-                <View key={i} style={s.etapaRow}>
+              {detalhe?.etapas?.map((etapa, i) => (
+                <View key={etapa.id} style={s.etapaRow}>
                   <View style={[s.etapaDot, etapa.concluida && s.etapaDotDone]} />
-                  {i < (detalhe?.etapas.length ?? 0) - 1 && (
-                    <View style={[s.etapaLine, etapa.concluida && s.etapaLineDone]} />
-                  )}
+                  {i < (detalhe.etapas?.length ?? 0) - 1 && <View style={[s.etapaLine, etapa.concluida && s.etapaLineDone]} />}
                   <View style={s.etapaInfo}>
                     <Text style={[s.etapaNome, etapa.concluida && s.etapaNomeDone]}>{etapa.nome}</Text>
-                    {etapa.hora && <Text style={s.etapaHora}>{etapa.hora}</Text>}
+                    {etapa.hora && <Text style={s.etapaHora}>{new Date(etapa.hora).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</Text>}
                   </View>
                 </View>
               ))}
-
-              <Text style={s.sectionTitle}>Fotos {detalhe?.fotos.length ? `(${detalhe.fotos.length})` : ''}</Text>
-              {detalhe && detalhe.fotos.length > 0 ? (
-                <View style={s.fotosRow}>
-                  {detalhe.fotos.map((uri, i) => <Image key={i} source={{uri}} style={s.foto} />)}
-                </View>
-              ) : (
-                <Text style={s.semFotos}>Nenhuma foto registrada ainda</Text>
-              )}
 
               <TouchableOpacity style={s.closeBtn} onPress={() => setDetalhe(null)}>
                 <Text style={s.closeBtnText}>Fechar</Text>
@@ -268,46 +222,49 @@ export default function PedidosScreen() {
 
               <Text style={s.label}>Cliente *</Text>
               <TouchableOpacity style={s.selectBtn} onPress={() => setShowPickerCliente(!showPickerCliente)}>
-                <Text style={novoCliente ? s.selectValue : s.selectPlaceholder}>{novoCliente || 'Selecionar cliente...'}</Text>
+                <Text style={novoCliente ? s.selectValue : s.selectPlaceholder}>{novoCliente?.nome || 'Selecionar cliente...'}</Text>
                 <Text style={s.selectArrow}>▼</Text>
               </TouchableOpacity>
               {showPickerCliente && (
                 <View style={s.pickerList}>
                   {clientes.map(c => (
-                    <TouchableOpacity key={c} style={s.pickerItem} onPress={() => { setNovoCliente(c); setShowPickerCliente(false); }}>
-                      <Text style={s.pickerItemText}>{c}</Text>
+                    <TouchableOpacity key={c.vinculo_id} style={s.pickerItem} onPress={() => { setNovoCliente(c); setShowPickerCliente(false); }}>
+                      <Text style={s.pickerItemText}>{c.nome}</Text>
                     </TouchableOpacity>
                   ))}
+                  {clientes.length === 0 && <Text style={s.pickerEmpty}>Nenhum cliente vinculado</Text>}
                 </View>
               )}
 
               <Text style={s.label}>Despachante *</Text>
               <TouchableOpacity style={s.selectBtn} onPress={() => setShowPickerDesp(!showPickerDesp)}>
-                <Text style={novoDespachante ? s.selectValue : s.selectPlaceholder}>{novoDespachante || 'Selecionar despachante...'}</Text>
+                <Text style={novoDespachante ? s.selectValue : s.selectPlaceholder}>{novoDespachante?.nome || 'Selecionar despachante...'}</Text>
                 <Text style={s.selectArrow}>▼</Text>
               </TouchableOpacity>
               {showPickerDesp && (
                 <View style={s.pickerList}>
                   {despachantes.map(d => (
-                    <TouchableOpacity key={d} style={s.pickerItem} onPress={() => { setNovoDespachante(d); setShowPickerDesp(false); }}>
-                      <Text style={s.pickerItemText}>{d}</Text>
+                    <TouchableOpacity key={d.id} style={s.pickerItem} onPress={() => { setNovoDespachante(d); setShowPickerDesp(false); }}>
+                      <Text style={s.pickerItemText}>{d.nome}</Text>
                     </TouchableOpacity>
                   ))}
+                  {despachantes.length === 0 && <Text style={s.pickerEmpty}>Nenhum despachante cadastrado</Text>}
                 </View>
               )}
 
               <Text style={s.label}>Excursão de destino *</Text>
               <TouchableOpacity style={s.selectBtn} onPress={() => setShowPickerExc(!showPickerExc)}>
-                <Text style={novoExcursao ? s.selectValue : s.selectPlaceholder}>{novoExcursao || 'Selecionar excursão...'}</Text>
+                <Text style={novoExcursao ? s.selectValue : s.selectPlaceholder}>{novoExcursao ? `${novoExcursao.nome} (Setor ${novoExcursao.setor}, Vaga ${novoExcursao.vaga})` : 'Selecionar excursão...'}</Text>
                 <Text style={s.selectArrow}>▼</Text>
               </TouchableOpacity>
               {showPickerExc && (
                 <View style={s.pickerList}>
                   {excursoes.map(e => (
-                    <TouchableOpacity key={e} style={s.pickerItem} onPress={() => { setNovoExcursao(e); setShowPickerExc(false); }}>
-                      <Text style={s.pickerItemText}>{e}</Text>
+                    <TouchableOpacity key={e.id} style={s.pickerItem} onPress={() => { setNovoExcursao(e); setShowPickerExc(false); }}>
+                      <Text style={s.pickerItemText}>{e.nome} (Setor {e.setor}, Vaga {e.vaga})</Text>
                     </TouchableOpacity>
                   ))}
+                  {excursoes.length === 0 && <Text style={s.pickerEmpty}>Nenhuma excursão cadastrada</Text>}
                 </View>
               )}
 
@@ -317,10 +274,10 @@ export default function PedidosScreen() {
               <Text style={s.label}>Descrição</Text>
               <TextInput style={[s.input, {height: 70, textAlignVertical: 'top', paddingTop: 12}]} placeholder="Descreva os itens..." placeholderTextColor={Colors.gray} value={novoDescricao} onChangeText={setNovoDescricao} multiline />
 
-              <TouchableOpacity style={s.saveBtn} onPress={criarPedido}>
-                <Text style={s.saveBtnText}>Criar Pedido</Text>
+              <TouchableOpacity style={s.saveBtn} onPress={handleCriar} disabled={criando}>
+                <Text style={s.saveBtnText}>{criando ? 'Criando...' : 'Criar Pedido'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => { limparNovo(); setModalNovo(false); }}>
+              <TouchableOpacity onPress={() => setModalNovo(false)}>
                 <Text style={s.cancel}>Cancelar</Text>
               </TouchableOpacity>
             </ScrollView>
@@ -337,11 +294,6 @@ const s = StyleSheet.create({
   title:        {fontSize: 22, fontWeight: '700', color: Colors.clareza},
   addBtn:       {backgroundColor: Colors.pulso, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8},
   addBtnText:   {color: Colors.matriz, fontWeight: '700', fontSize: 14},
-  abasRow:      {flexDirection: 'row', marginHorizontal: 24, marginBottom: 12, backgroundColor: '#162433', borderRadius: 8, padding: 4},
-  aba:          {flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 6},
-  abaAtiva:     {backgroundColor: Colors.pulso},
-  abaText:      {fontSize: 14, fontWeight: '600', color: Colors.gray},
-  abaTextAtiva: {color: Colors.matriz},
   searchBox:    {flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 10, backgroundColor: '#162433', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 14},
   searchIcon:   {fontSize: 16, marginRight: 8},
   searchInput:  {flex: 1, height: 44, color: Colors.clareza, fontSize: 15},
@@ -380,20 +332,18 @@ const s = StyleSheet.create({
   etapaNome:    {fontSize: 14, color: Colors.gray},
   etapaNomeDone:{color: Colors.clareza, fontWeight: '600'},
   etapaHora:    {fontSize: 12, color: Colors.gray, marginTop: 2},
-  fotosRow:     {flexDirection: 'row', flexWrap: 'wrap', gap: 10},
-  foto:         {width: 100, height: 100, borderRadius: 10},
-  semFotos:     {fontSize: 13, color: Colors.gray, fontStyle: 'italic'},
   closeBtn:     {height: 52, backgroundColor: '#162433', borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 24, borderWidth: 1, borderColor: '#1E3448'},
   closeBtnText: {color: Colors.clareza, fontWeight: '600', fontSize: 15},
   label:        {fontSize: 13, fontWeight: '600', color: Colors.gray, marginBottom: 6, marginTop: 12},
   input:        {height: 50, backgroundColor: '#162433', borderRadius: 8, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 16, color: Colors.clareza, fontSize: 15},
   selectBtn:    {height: 50, backgroundColor: '#162433', borderRadius: 8, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
-  selectValue:  {fontSize: 15, color: Colors.clareza},
+  selectValue:  {fontSize: 15, color: Colors.clareza, flex: 1},
   selectPlaceholder:{fontSize: 15, color: Colors.gray},
   selectArrow:  {fontSize: 12, color: Colors.gray},
-  pickerList:   {backgroundColor: '#1E3448', borderRadius: 8, marginTop: 4, overflow: 'hidden'},
+  pickerList:   {backgroundColor: '#1E3448', borderRadius: 8, marginTop: 4, overflow: 'hidden', maxHeight: 150},
   pickerItem:   {paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#0F1F2E'},
   pickerItemText:{fontSize: 14, color: Colors.clareza},
+  pickerEmpty:  {padding: 16, color: Colors.gray, fontSize: 13, textAlign: 'center'},
   saveBtn:      {height: 52, backgroundColor: Colors.pulso, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 24},
   saveBtnText:  {color: Colors.matriz, fontWeight: '700', fontSize: 16},
   cancel:       {textAlign: 'center', color: Colors.gray, marginTop: 16, fontSize: 14},

@@ -1,54 +1,13 @@
-import React, {useState, useCallback} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Image, RefreshControl} from 'react-native';
+import React, {useState, useCallback, useEffect} from 'react';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, RefreshControl, ActivityIndicator} from 'react-native';
+import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import StatusBadge from '../../components/StatusBadge';
+import {useAuth} from '../../context/AuthContext';
+import {listarPedidosCliente, PedidoData} from '../../services/api';
+import {requestNotificationPermission, getFCMToken, registrarTokenCliente} from '../../services/notifications';
 
-type Status = 'aguardando' | 'em_transito' | 'entregue' | 'cancelado';
-type Pedido = {
-  id: string; empresa: string; excursao: string; status: Status;
-  volumes: string; descricao: string; previsao: string;
-  timeline: {hora: string; evento: string}[];
-  fotos: string[];
-};
-
-const pedidos: Pedido[] = [
-  {
-    id: '#0138', empresa: 'Trans Silva', excursao: 'SP - Lote A', status: 'em_transito',
-    volumes: '3', descricao: 'Caixas de eletrônicos', previsao: 'Hoje, ~14:00',
-    timeline: [
-      {hora: '08:00', evento: 'Pedido recebido'},
-      {hora: '09:30', evento: 'Coletado pelo despachante'},
-      {hora: '11:15', evento: 'Em rota para excursão'},
-    ],
-    fotos: ['https://via.placeholder.com/200', 'https://via.placeholder.com/200'],
-  },
-  {
-    id: '#0131', empresa: 'Rápido Norte', excursao: 'RJ - Lote B', status: 'entregue',
-    volumes: '1', descricao: 'Envelope documentos', previsao: '',
-    timeline: [
-      {hora: '07:00', evento: 'Pedido recebido'},
-      {hora: '08:45', evento: 'Coletado pelo despachante'},
-      {hora: '10:00', evento: 'Entregue na excursão'},
-    ],
-    fotos: ['https://via.placeholder.com/200'],
-  },
-  {
-    id: '#0125', empresa: 'Trans Silva', excursao: 'BH - Lote A', status: 'aguardando',
-    volumes: '2', descricao: 'Peças automotivas', previsao: 'Hoje, ~16:00',
-    timeline: [{hora: '06:00', evento: 'Pedido recebido'}],
-    fotos: [],
-  },
-  {
-    id: '#0119', empresa: 'Rápido Norte', excursao: 'RJ - Lote C', status: 'entregue',
-    volumes: '5', descricao: 'Roupas', previsao: '',
-    timeline: [
-      {hora: '07:00', evento: 'Pedido recebido'},
-      {hora: '08:45', evento: 'Coletado'},
-      {hora: '10:00', evento: 'Entregue'},
-    ],
-    fotos: ['https://via.placeholder.com/200'],
-  },
-];
+type Status = 'aguardando' | 'em_transito' | 'entregue';
 
 const filtros: {label: string; value: Status | 'todos'}[] = [
   {label: 'Todos', value: 'todos'},
@@ -58,26 +17,52 @@ const filtros: {label: string; value: Status | 'todos'}[] = [
 ];
 
 export default function PedidosScreen() {
-  const [busca, setBusca] = useState('');
+  const {cliente} = useAuth();
+  const [pedidos, setPedidos] = useState<PedidoData[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState<Status | 'todos'>('todos');
-  const [selecionado, setSelecionado] = useState<Pedido | null>(null);
+  const [selecionado, setSelecionado] = useState<PedidoData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Registra token FCM do cliente
+  useEffect(() => {
+    (async () => {
+      if (!cliente?.id) return;
+      const permitido = await requestNotificationPermission();
+      if (!permitido) return;
+      const token = await getFCMToken();
+      if (token) await registrarTokenCliente(cliente.id, token);
+    })();
+  }, [cliente?.id]);
+
+  const carregar = async () => {
+    if (!cliente?.id) return;
+    const res = await listarPedidosCliente(cliente.id);
+    if (res.success && res.pedidos) setPedidos(res.pedidos);
+  };
+
+  useFocusEffect(useCallback(() => {
+    setLoading(true);
+    carregar().finally(() => setLoading(false));
+  }, [cliente?.id]));
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
-  }, []);
+    carregar().finally(() => setRefreshing(false));
+  }, [cliente?.id]);
 
   const filtrados = pedidos.filter(p => {
-    const q = busca.toLowerCase();
-    const matchBusca = !q || p.id.includes(q) || p.empresa.toLowerCase().includes(q) || p.excursao.toLowerCase().includes(q);
     const matchFiltro = filtro === 'todos' || p.status === filtro;
-    return matchBusca && matchFiltro;
+    return matchFiltro;
   });
 
   const emAndamento = pedidos.filter(p => p.status === 'em_transito').length;
   const aguardando = pedidos.filter(p => p.status === 'aguardando').length;
   const entregues = pedidos.filter(p => p.status === 'entregue').length;
+
+  if (loading) {
+    return <View style={[s.container, {justifyContent: 'center', alignItems: 'center'}]}><ActivityIndicator size="large" color={Colors.pulso} /></View>;
+  }
 
   return (
     <View style={s.container}>
@@ -85,7 +70,6 @@ export default function PedidosScreen() {
         <Text style={s.title}>Meus Pedidos</Text>
       </View>
 
-      {/* Resumo */}
       <View style={s.resumoRow}>
         <View style={s.resumoCard}>
           <Text style={[s.resumoValor, {color: Colors.pulso}]}>{emAndamento}</Text>
@@ -99,11 +83,6 @@ export default function PedidosScreen() {
           <Text style={[s.resumoValor, {color: '#86EFAC'}]}>{entregues}</Text>
           <Text style={s.resumoLabel}>Entregues</Text>
         </View>
-      </View>
-
-      <View style={s.searchBox}>
-        <Text style={s.searchIcon}>🔍</Text>
-        <TextInput style={s.searchInput} placeholder="Buscar pedido..." placeholderTextColor={Colors.gray} value={busca} onChangeText={setBusca} />
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filtrosScroll} contentContainerStyle={s.filtrosRow}>
@@ -123,10 +102,9 @@ export default function PedidosScreen() {
         {filtrados.map(p => (
           <TouchableOpacity key={p.id} style={s.card} onPress={() => setSelecionado(p)} activeOpacity={0.8}>
             <View style={s.cardLeft}>
-              <Text style={s.pedidoId}>{p.id}</Text>
-              <Text style={s.empresa}>{p.empresa}</Text>
-              <Text style={s.excursao}>{p.excursao} · {p.volumes} vol.</Text>
-              {p.previsao ? <Text style={s.previsao}>⏱️ {p.previsao}</Text> : null}
+              <Text style={s.pedidoId}>#{p.numero}</Text>
+              <Text style={s.empresa}>{p.nome_empresa || ''}</Text>
+              <Text style={s.excursao}>{p.excursao_nome} · {p.volumes} vol.</Text>
             </View>
             <StatusBadge status={p.status} />
           </TouchableOpacity>
@@ -139,38 +117,28 @@ export default function PedidosScreen() {
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={s.sheetHeader}>
                 <View>
-                  <Text style={s.sheetId}>{selecionado?.id}</Text>
-                  <Text style={s.sheetEmpresa}>{selecionado?.empresa} · {selecionado?.excursao}</Text>
+                  <Text style={s.sheetId}>#{selecionado?.numero}</Text>
+                  <Text style={s.sheetEmpresa}>{selecionado?.nome_empresa} · {selecionado?.excursao_nome}</Text>
                 </View>
                 {selecionado && <StatusBadge status={selecionado.status} />}
               </View>
 
               <View style={s.detRow}><Text style={s.detLabel}>Volumes</Text><Text style={s.detValue}>{selecionado?.volumes}</Text></View>
               <View style={s.detRow}><Text style={s.detLabel}>Descrição</Text><Text style={s.detValue}>{selecionado?.descricao || '—'}</Text></View>
-              {selecionado?.previsao ? <View style={s.detRow}><Text style={s.detLabel}>Previsão</Text><Text style={[s.detValue, {color: Colors.pulso}]}>{selecionado.previsao}</Text></View> : null}
 
               <Text style={s.sectionTitle}>Histórico</Text>
-              {selecionado?.timeline.map((t, i) => (
-                <View key={i} style={s.timelineItem}>
+              {selecionado?.etapas?.map((t, i) => (
+                <View key={t.id} style={s.timelineItem}>
                   <View style={s.timelineLine}>
-                    <View style={[s.timelineDot, i === 0 && {backgroundColor: Colors.pulso}]} />
-                    {i < (selecionado.timeline.length - 1) && <View style={s.timelineBar} />}
+                    <View style={[s.timelineDot, t.concluida && {backgroundColor: Colors.pulso}]} />
+                    {i < (selecionado.etapas?.length ?? 0) - 1 && <View style={s.timelineBar} />}
                   </View>
                   <View style={s.timelineText}>
-                    <Text style={s.timelineHora}>{t.hora}</Text>
-                    <Text style={s.timelineEvento}>{t.evento}</Text>
+                    {t.hora && <Text style={s.timelineHora}>{new Date(t.hora).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</Text>}
+                    <Text style={s.timelineEvento}>{t.nome}</Text>
                   </View>
                 </View>
               ))}
-
-              <Text style={s.sectionTitle}>Fotos {selecionado?.fotos.length ? `(${selecionado.fotos.length})` : ''}</Text>
-              {selecionado && selecionado.fotos.length > 0 ? (
-                <View style={s.fotosRow}>
-                  {selecionado.fotos.map((uri, i) => <Image key={i} source={{uri}} style={s.foto} />)}
-                </View>
-              ) : (
-                <Text style={s.semFotos}>Nenhuma foto registrada ainda</Text>
-              )}
 
               <TouchableOpacity style={s.closeBtn} onPress={() => setSelecionado(null)}>
                 <Text style={s.closeBtnText}>Fechar</Text>
@@ -191,9 +159,6 @@ const s = StyleSheet.create({
   resumoCard:     {flex: 1, backgroundColor: '#162433', borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#1E3448'},
   resumoValor:    {fontSize: 20, fontWeight: '800'},
   resumoLabel:    {fontSize: 10, color: Colors.gray, marginTop: 2, fontWeight: '600'},
-  searchBox:      {flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 10, backgroundColor: '#162433', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 14},
-  searchIcon:     {fontSize: 16, marginRight: 8},
-  searchInput:    {flex: 1, height: 44, color: Colors.clareza, fontSize: 15},
   filtrosScroll:  {maxHeight: 44, marginBottom: 10},
   filtrosRow:     {paddingHorizontal: 24, gap: 8, justifyContent: 'center', flexGrow: 1, alignItems: 'center'},
   filtroChip:     {backgroundColor: '#162433', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: '#1E3448'},
@@ -206,7 +171,6 @@ const s = StyleSheet.create({
   pedidoId:       {fontSize: 16, fontWeight: '700', color: Colors.clareza},
   empresa:        {fontSize: 13, color: Colors.gray, marginTop: 2},
   excursao:       {fontSize: 12, color: '#60A5FA', marginTop: 2},
-  previsao:       {fontSize: 12, color: Colors.pulso, marginTop: 4},
   overlay:        {flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end'},
   sheet:          {backgroundColor: '#0F1F2E', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 28, paddingBottom: 40, maxHeight: '85%'},
   sheetHeader:    {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20},
@@ -223,9 +187,6 @@ const s = StyleSheet.create({
   timelineText:   {flex: 1, paddingBottom: 16},
   timelineHora:   {fontSize: 12, color: Colors.gray, marginBottom: 2},
   timelineEvento: {fontSize: 14, color: Colors.clareza, fontWeight: '500'},
-  fotosRow:       {flexDirection: 'row', flexWrap: 'wrap', gap: 10},
-  foto:           {width: 100, height: 100, borderRadius: 10},
-  semFotos:       {fontSize: 13, color: Colors.gray, fontStyle: 'italic'},
   closeBtn:       {height: 52, backgroundColor: '#162433', borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 20, borderWidth: 1, borderColor: '#1E3448'},
   closeBtnText:   {color: Colors.clareza, fontWeight: '600', fontSize: 15},
 });

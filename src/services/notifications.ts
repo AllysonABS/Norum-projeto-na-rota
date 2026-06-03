@@ -35,6 +35,16 @@ export async function registrarTokenEmpresa(empresaId: string, token: string): P
   } catch {}
 }
 
+export async function registrarTokenCliente(clienteId: string, token: string): Promise<void> {
+  try {
+    await fetch(`${API_URL}/api/cliente/${clienteId}/fcm-token`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({token}),
+    });
+  } catch {}
+}
+
 export function onForegroundMessage(callback: (msg: any) => void) {
   if (Platform.OS !== 'android') return () => {};
   const messaging = require('@react-native-firebase/messaging').default;
