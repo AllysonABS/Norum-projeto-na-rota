@@ -23,6 +23,22 @@ type LoginResponse = {
   error?: string;
 };
 
+export async function loginUnificado(doc: string, senha: string): Promise<{
+  success: boolean; tipo?: 'empresa' | 'despachante' | 'cliente';
+  empresa?: EmpresaData; despachante?: DespachanteData; cliente?: ClienteData; error?: string;
+}> {
+  try {
+    const res = await fetch(`${API_URL}/api/login-unificado`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({doc, senha}),
+    });
+    return await res.json();
+  } catch {
+    return {success: false, error: 'Erro de conexão com o servidor.'};
+  }
+}
+
 export async function loginEmpresa(cnpj: string, senha: string): Promise<LoginResponse> {
   try {
     const res = await fetch(`${API_URL}/api/login`, {

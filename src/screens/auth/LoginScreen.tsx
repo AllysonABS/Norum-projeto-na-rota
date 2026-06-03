@@ -16,7 +16,7 @@ import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
-import {loginEmpresa, loginCliente, loginDespachante} from '../../services/api';
+import {loginUnificado} from '../../services/api';
 import {useAuth} from '../../context/AuthContext';
 
 type Props = {
@@ -107,30 +107,25 @@ export default function LoginScreen({navigation}: Props) {
     const doc = cpfCnpj.replace(/\D/g, '');
 
     try {
-      const [resEmpresa, resDesp, resCliente] = await Promise.all([
-        loginEmpresa(doc, password),
-        loginDespachante(doc, password),
-        loginCliente(doc, password),
-      ]);
+      const res = await loginUnificado(doc, password);
 
-      // Salva ou remove credenciais
       if (lembrar) {
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({cpfCnpj, password}));
       } else {
         await AsyncStorage.removeItem(STORAGE_KEY);
       }
 
-      if (resEmpresa.success && resEmpresa.empresa) {
-        setEmpresa(resEmpresa.empresa);
+      if (res.success && res.tipo === 'empresa' && res.empresa) {
+        setEmpresa(res.empresa);
         navigation.replace('Empresa');
-      } else if (resDesp.success && resDesp.despachante) {
-        setDespachante(resDesp.despachante);
+      } else if (res.success && res.tipo === 'despachante' && res.despachante) {
+        setDespachante(res.despachante);
         navigation.replace('Despachante');
-      } else if (resCliente.success && resCliente.cliente) {
-        setCliente(resCliente.cliente);
+      } else if (res.success && res.tipo === 'cliente' && res.cliente) {
+        setCliente(res.cliente);
         navigation.replace('Cliente');
       } else {
-        Alert.alert('Erro', 'Credenciais inválidas.');
+        Alert.alert('Erro', res.error || 'Credenciais inválidas.');
       }
     } catch {
       Alert.alert('Erro', 'Falha na conexão com o servidor.');

@@ -79,6 +79,71 @@ app.post('/api/cadastro', async (req, res) => {
   }
 });
 
+// Login unificado (tenta empresa, despachante e cliente em sequencia rapida)
+app.post('/api/login-unificado', async (req, res) => {
+  try {
+    const {doc, senha} = req.body;
+    if (!doc || !senha) return res.status(400).json({error: 'Documento e senha obrigat\u00f3rios.'});
+
+    // Tenta empresa
+    const empRes = await pool.query('SELECT * FROM empresas WHERE cnpj = $1 AND ativa = true', [doc]);
+    if (empRes.rows.length > 0) {
+      const empresa = empRes.rows[0];
+      if (await bcrypt.compare(senha, empresa.senha_hash)) {
+        return res.json({
+          success: true, tipo: 'empresa',
+          empresa: {
+            id: empresa.id, nome_empresa: empresa.nome_empresa, cnpj: empresa.cnpj,
+            nome_responsavel: empresa.nome_responsavel, email: empresa.email,
+            telefone: empresa.telefone, endereco: empresa.endereco || '',
+            cidade: empresa.cidade || '', estado: empresa.estado || '',
+            cep: empresa.cep || '', status_assinatura: empresa.status_assinatura,
+          },
+        });
+      }
+    }
+
+    // Tenta despachante
+    const despRes = await pool.query('SELECT * FROM despachantes WHERE cpf=$1', [doc]);
+    if (despRes.rows.length > 0) {
+      const desp = despRes.rows[0];
+      if (await bcrypt.compare(senha, desp.senha_hash)) {
+        const empresas = await pool.query(
+          `SELECT e.id, e.nome_empresa FROM despachante_empresa de JOIN empresas e ON e.id = de.empresa_id
+           WHERE de.despachante_id=$1 AND de.ativo=true`, [desp.id]
+        );
+        if (empresas.rows.length > 0) {
+          return res.json({
+            success: true, tipo: 'despachante',
+            despachante: { id: desp.id, nome: desp.nome, cpf: desp.cpf, telefone: desp.telefone || '', empresas: empresas.rows },
+          });
+        }
+      }
+    }
+
+    // Tenta cliente
+    const cliRes = await pool.query('SELECT * FROM clientes WHERE cpf = $1 AND ativo = true', [doc]);
+    if (cliRes.rows.length > 0) {
+      const cliente = cliRes.rows[0];
+      if (await bcrypt.compare(senha, cliente.senha_hash)) {
+        return res.json({
+          success: true, tipo: 'cliente',
+          cliente: {
+            id: cliente.id, nome: cliente.nome, cpf: cliente.cpf, cnpj: cliente.cnpj || '',
+            email: cliente.email, telefone: cliente.telefone, data_nascimento: cliente.data_nascimento || '',
+            endereco: cliente.endereco || '', cidade: cliente.cidade || '', estado: cliente.estado || '', cep: cliente.cep || '',
+          },
+        });
+      }
+    }
+
+    res.status(401).json({success: false, error: 'Credenciais inv\u00e1lidas.'});
+  } catch (err: any) {
+    console.error('Erro no login unificado:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
 // Login (para o app mobile usar)
 app.post('/api/login', async (req, res) => {
   try {
