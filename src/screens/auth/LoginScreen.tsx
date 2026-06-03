@@ -88,34 +88,31 @@ export default function LoginScreen({navigation}: Props) {
       return;
     }
     setLoading(true);
-    const cnpjLimpo = cpfCnpj.replace(/\D/g, '');
+    const doc = cpfCnpj.replace(/\D/g, '');
 
-    // Tenta login como empresa primeiro
-    const resEmpresa = await loginEmpresa(cnpjLimpo, password);
-    if (resEmpresa.success && resEmpresa.empresa) {
-      setEmpresa(resEmpresa.empresa);
+    try {
+      const [resEmpresa, resDesp, resCliente] = await Promise.all([
+        loginEmpresa(doc, password),
+        loginDespachante(doc, password),
+        loginCliente(doc, password),
+      ]);
+
+      if (resEmpresa.success && resEmpresa.empresa) {
+        setEmpresa(resEmpresa.empresa);
+        navigation.replace('Empresa');
+      } else if (resDesp.success && resDesp.despachante) {
+        setDespachante(resDesp.despachante);
+        navigation.replace('Despachante');
+      } else if (resCliente.success && resCliente.cliente) {
+        setCliente(resCliente.cliente);
+        navigation.replace('Cliente');
+      } else {
+        Alert.alert('Erro', 'Credenciais inválidas.');
+      }
+    } catch {
+      Alert.alert('Erro', 'Falha na conexão com o servidor.');
+    } finally {
       setLoading(false);
-      navigation.replace('Empresa');
-      return;
-    }
-
-    // Tenta login como despachante
-    const resDesp = await loginDespachante(cnpjLimpo, password);
-    if (resDesp.success && resDesp.despachante) {
-      setDespachante(resDesp.despachante);
-      setLoading(false);
-      navigation.replace('Despachante');
-      return;
-    }
-
-    // Tenta login como cliente
-    const resCliente = await loginCliente(cnpjLimpo, password);
-    setLoading(false);
-    if (resCliente.success && resCliente.cliente) {
-      setCliente(resCliente.cliente);
-      navigation.replace('Cliente');
-    } else {
-      Alert.alert('Erro', resCliente.error || 'Credenciais inválidas.');
     }
   };
 

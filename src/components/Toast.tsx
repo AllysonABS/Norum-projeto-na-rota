@@ -1,5 +1,5 @@
 import React, {useState, useCallback, useRef, useEffect} from 'react';
-import {Text, StyleSheet, View, Animated} from 'react-native';
+import {Text, StyleSheet, View} from 'react-native';
 import {Colors} from '../theme/colors';
 
 type ToastType = 'success' | 'error' | 'info';
