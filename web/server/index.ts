@@ -656,6 +656,141 @@ app.post('/api/login-despachante', async (req, res) => {
   }
 });
 
+// === PEDIDOS ===
+
+// Criar pedido
+app.post('/api/empresa/:empresaId/pedidos', async (req, res) => {
+  try {
+    const {empresaId} = req.params;
+    const {cliente_id, despachante_id, excursao_id, cliente_nome, despachante_nome, excursao_nome, volumes, descricao} = req.body;
+    if (!cliente_nome || !despachante_nome || !excursao_nome) {
+      return res.status(400).json({error: 'Preencha cliente, despachante e excurs\u00e3o.'});
+    }
+    const result = await pool.query(
+      `INSERT INTO pedidos (empresa_id, cliente_id, despachante_id, excursao_id, cliente_nome, despachante_nome, excursao_nome, volumes, descricao)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+      [empresaId, cliente_id || null, despachante_id || null, excursao_id || null, cliente_nome, despachante_nome, excursao_nome, volumes || 1, descricao || null]
+    );
+    const pedidoId = result.rows[0].id;
+    // Cria etapas padr\u00e3o
+    const etapas = ['Pedido recebido', 'Coleta realizada', 'Em rota para excurs\u00e3o', 'Entregue na excurs\u00e3o'];
+    for (let i = 0; i < etapas.length; i++) {
+      const concluida = i === 0;
+      const hora = i === 0 ? new Date() : null;
+      await pool.query(
+        'INSERT INTO pedido_etapas (pedido_id, nome, concluida, hora, ordem) VALUES ($1,$2,$3,$4,$5)',
+        [pedidoId, etapas[i], concluida, hora, i]
+      );
+    }
+    // Notifica o cliente se tiver id
+    if (cliente_id) {
+      // Busca tokens FCM do cliente (futuro) - por agora s\u00f3 cria notifica\u00e7\u00e3o in-app
+      const empresaNome = await pool.query('SELECT nome_empresa FROM empresas WHERE id=$1', [empresaId]);
+      const nomeEmp = empresaNome.rows[0]?.nome_empresa || 'Uma empresa';
+      await pool.query(
+        `INSERT INTO notificacoes (empresa_id, tipo, titulo, mensagem, dados)
+         VALUES ($1, 'novo_pedido', 'Novo pedido criado', $2, $3)`,
+        [empresaId, `Pedido criado para ${cliente_nome} por ${nomeEmp}.`, JSON.stringify({pedido_id: pedidoId, cliente_id})]
+      );
+    }
+    res.status(201).json({success: true, pedido_id: pedidoId});
+  } catch (err: any) {
+    console.error('Erro ao criar pedido:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Listar pedidos da empresa
+app.get('/api/empresa/:empresaId/pedidos', async (req, res) => {
+  try {
+    const {empresaId} = req.params;
+    const result = await pool.query(
+      `SELECT p.*, 
+        (SELECT json_agg(e ORDER BY e.ordem) FROM pedido_etapas e WHERE e.pedido_id = p.id) as etapas,
+        (SELECT json_agg(f ORDER BY f.criado_em) FROM pedido_fotos f WHERE f.pedido_id = p.id) as fotos
+       FROM pedidos p WHERE p.empresa_id=$1 ORDER BY p.criado_em DESC`,
+      [empresaId]
+    );
+    res.json({success: true, pedidos: result.rows});
+  } catch (err: any) {
+    console.error('Erro ao listar pedidos:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Listar pedidos do cliente
+app.get('/api/cliente/:clienteId/pedidos', async (req, res) => {
+  try {
+    const {clienteId} = req.params;
+    const result = await pool.query(
+      `SELECT p.*,
+        (SELECT json_agg(e ORDER BY e.ordem) FROM pedido_etapas e WHERE e.pedido_id = p.id) as etapas,
+        (SELECT json_agg(f ORDER BY f.criado_em) FROM pedido_fotos f WHERE f.pedido_id = p.id) as fotos,
+        emp.nome_empresa
+       FROM pedidos p JOIN empresas emp ON emp.id = p.empresa_id
+       WHERE p.cliente_id=$1 ORDER BY p.criado_em DESC`,
+      [clienteId]
+    );
+    res.json({success: true, pedidos: result.rows});
+  } catch (err: any) {
+    console.error('Erro ao listar pedidos do cliente:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Listar pedidos do despachante
+app.get('/api/despachante/:despachanteId/pedidos', async (req, res) => {
+  try {
+    const {despachanteId} = req.params;
+    const result = await pool.query(
+      `SELECT p.*,
+        (SELECT json_agg(e ORDER BY e.ordem) FROM pedido_etapas e WHERE e.pedido_id = p.id) as etapas,
+        (SELECT json_agg(f ORDER BY f.criado_em) FROM pedido_fotos f WHERE f.pedido_id = p.id) as fotos,
+        emp.nome_empresa
+       FROM pedidos p JOIN empresas emp ON emp.id = p.empresa_id
+       WHERE p.despachante_id=$1 ORDER BY p.criado_em DESC`,
+      [despachanteId]
+    );
+    res.json({success: true, pedidos: result.rows});
+  } catch (err: any) {
+    console.error('Erro ao listar pedidos do despachante:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Atualizar status do pedido
+app.put('/api/pedidos/:pedidoId/status', async (req, res) => {
+  try {
+    const {pedidoId} = req.params;
+    const {status} = req.body;
+    await pool.query('UPDATE pedidos SET status=$1, atualizado_em=NOW() WHERE id=$2', [status, pedidoId]);
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao atualizar status:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Concluir etapa do pedido
+app.put('/api/pedidos/:pedidoId/etapas/:etapaId/concluir', async (req, res) => {
+  try {
+    const {pedidoId, etapaId} = req.params;
+    await pool.query('UPDATE pedido_etapas SET concluida=true, hora=NOW() WHERE id=$1 AND pedido_id=$2', [etapaId, pedidoId]);
+    // Verifica se todas as etapas foram conclu\u00eddas
+    const total = await pool.query('SELECT COUNT(*)::int as total FROM pedido_etapas WHERE pedido_id=$1', [pedidoId]);
+    const concluidas = await pool.query('SELECT COUNT(*)::int as total FROM pedido_etapas WHERE pedido_id=$1 AND concluida=true', [pedidoId]);
+    if (concluidas.rows[0].total >= total.rows[0].total) {
+      await pool.query('UPDATE pedidos SET status=$1, atualizado_em=NOW() WHERE id=$2', ['entregue', pedidoId]);
+    } else if (concluidas.rows[0].total > 1) {
+      await pool.query('UPDATE pedidos SET status=$1, atualizado_em=NOW() WHERE id=$2', ['em_transito', pedidoId]);
+    }
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao concluir etapa:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
 // === EXCURSÕES ===
 
 // Listar excursões da empresa
