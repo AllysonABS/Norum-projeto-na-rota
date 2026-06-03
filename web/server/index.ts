@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
 
@@ -7,13 +9,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const pool = new Pool({
-  host: '76.13.70.131',
-  port: 5434,
-  user: 'postgres',
-  password: 'May@19091993',
-  database: 'na_rota',
-  ssl: false,
+  host: process.env.DB_HOST,
+  port: parseInt(process.env.DB_PORT || '5432'),
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  ssl: process.env.DB_SSL === 'true',
 });
 
 // Cadastro de empresa
@@ -107,7 +112,12 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-const PORT = 3001;
+const PORT = parseInt(process.env.PORT || '3001');
+
+// Serve static files in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../dist')));
+}
 
 // Buscar dados da empresa
 app.get('/api/empresa/:id', async (req, res) => {
@@ -595,6 +605,15 @@ app.post('/api/login-cliente', async (req, res) => {
     res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });
+
+// SPA fallback - serve index.html for non-API routes in production
+if (process.env.NODE_ENV === 'production') {
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+      res.sendFile(path.join(__dirname, '../dist/index.html'));
+    }
+  });
+}
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`API rodando em http://0.0.0.0:${PORT}`);
