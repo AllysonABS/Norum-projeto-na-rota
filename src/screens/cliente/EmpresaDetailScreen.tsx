@@ -1,5 +1,6 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState} from 'react';
 import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Linking, ActivityIndicator} from 'react-native';
+import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import StatusBadge from '../../components/StatusBadge';
 import {useAuth} from '../../context/AuthContext';
@@ -17,8 +18,9 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
   const [pedidos, setPedidos] = useState<PedidoData[]>([]);
   const [loadingPedidos, setLoadingPedidos] = useState(true);
 
-  useEffect(() => {
+  useFocusEffect(React.useCallback(() => {
     if (cliente?.id) {
+      setLoadingPedidos(true);
       listarPedidosCliente(cliente.id).then(res => {
         if (res.success && res.pedidos) {
           setPedidos(res.pedidos.filter(p => p.empresa_id === empresa.id));
@@ -28,7 +30,7 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
     } else {
       setLoadingPedidos(false);
     }
-  }, [cliente?.id, empresa.id]);
+  }, [cliente?.id, empresa.id]));
 
   const stats = [
     {label: 'Total', value: pedidos.length, color: Colors.clareza},

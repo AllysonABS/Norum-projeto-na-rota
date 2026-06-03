@@ -35,6 +35,14 @@ export default function PedidosScreen() {
     })();
   }, [cliente?.id]);
 
+  // Recarrega quando recebe push em foreground
+  useEffect(() => {
+    const unsub = require('@react-native-firebase/messaging').default().onMessage(() => {
+      carregar();
+    });
+    return unsub;
+  }, [cliente?.id]);
+
   const carregar = async () => {
     if (!cliente?.id) return;
     const res = await listarPedidosCliente(cliente.id);

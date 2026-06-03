@@ -1,71 +1,82 @@
 import React, {useState, useCallback} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, RefreshControl} from 'react-native';
-import {useNavigation} from '@react-navigation/native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, RefreshControl, ActivityIndicator} from 'react-native';
+import {useNavigation, useFocusEffect} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {DespachanteStackParamList} from '../../navigation/DespachanteNavigator';
 import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
-
-type Pedido = {
-  id: string; cliente: string; empresa: string; destino: string;
-  urgente: boolean; volumes: number; tempoFila: string;
-};
-
-const pedidosIniciais: Pedido[] = [
-  {id: '#0140', cliente: 'Ana Beatriz', empresa: 'Trans Silva', destino: 'SP - Lote A', urgente: true, volumes: 3, tempoFila: '5 min'},
-  {id: '#0139', cliente: 'Bruno Carvalho', empresa: 'Rápido Norte', destino: 'RJ - Lote B', urgente: false, volumes: 1, tempoFila: '12 min'},
-  {id: '#0138', cliente: 'João Silva', empresa: 'Trans Silva', destino: 'SP - Lote A', urgente: false, volumes: 5, tempoFila: '25 min'},
-  {id: '#0137', cliente: 'Maria Santos', empresa: 'Sul Cargas', destino: 'BH - Lote A', urgente: false, volumes: 2, tempoFila: '40 min'},
-];
-
-const excursoes = ['Todas', 'SP - Lote A', 'RJ - Lote B', 'BH - Lote A'];
+import {useAuth} from '../../context/AuthContext';
+import {listarPedidosDespachante, atualizarStatusPedido, concluirEtapaPedido, PedidoData} from '../../services/api';
 
 export default function FilaScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<DespachanteStackParamList>>();
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [pedidos, setPedidos] = useState<Pedido[]>(pedidosIniciais);
+  const {despachante} = useAuth();
+  const [pedidos, setPedidos] = useState<PedidoData[]>([]);
+  const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
-  const [filtroExcursao, setFiltroExcursao] = useState('Todas');
   const [refreshing, setRefreshing] = useState(false);
+
+  const carregar = async () => {
+    if (!despachante?.id) return;
+    const res = await listarPedidosDespachante(despachante.id);
+    if (res.success && res.pedidos) setPedidos(res.pedidos);
+  };
+
+  useFocusEffect(useCallback(() => {
+    setLoading(true);
+    carregar().finally(() => setLoading(false));
+  }, [despachante?.id]));
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
-  }, []);
+    carregar().finally(() => setRefreshing(false));
+  }, [despachante?.id]);
 
+  const fila = pedidos.filter(p => p.status === 'aguardando');
+  const emAndamento = pedidos.filter(p => p.status === 'em_transito');
 
-  const filtrados = pedidos.filter(p => {
+  const iniciarColeta = async (p: PedidoData) => {
+    // Conclui etapa "Coleta realizada" e muda status para em_transito
+    const etapaColeta = p.etapas?.find(e => e.nome === 'Coleta realizada' && !e.concluida);
+    if (etapaColeta) await concluirEtapaPedido(p.id, etapaColeta.id);
+    await atualizarStatusPedido(p.id, 'em_transito');
+    carregar();
+  };
+
+  const filtrados = fila.filter(p => {
     const q = busca.toLowerCase();
-    const matchBusca = !q || p.id.includes(q) || p.cliente.toLowerCase().includes(q) || p.empresa.toLowerCase().includes(q);
-    const matchExcursao = filtroExcursao === 'Todas' || p.destino === filtroExcursao;
-    return matchBusca && matchExcursao;
+    return !q || p.cliente_nome.toLowerCase().includes(q) || p.excursao_nome.toLowerCase().includes(q);
   });
+
+  if (loading) {
+    return <View style={[s.container, {justifyContent: 'center', alignItems: 'center'}]}><ActivityIndicator size="large" color={Colors.pulso} /></View>;
+  }
 
   return (
     <View style={s.container}>
       <View style={s.header}>
         <View style={s.titleRow}>
           <Text style={s.title}>Fila de Expedição</Text>
-          <View style={s.badge}><Text style={s.badgeText}>{pedidos.length}</Text></View>
+          <View style={s.badge}><Text style={s.badgeText}>{fila.length}</Text></View>
         </View>
         <TouchableOpacity style={s.exitBtn} onPress={() => rootNavigation.replace('Login')}>
           <Text style={s.exitText}>Sair</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Resumo */}
       <View style={s.resumoRow}>
         <View style={s.resumoCard}>
-          <Text style={[s.resumoValor, {color: '#F59E0B'}]}>{pedidos.length}</Text>
+          <Text style={[s.resumoValor, {color: '#F59E0B'}]}>{fila.length}</Text>
           <Text style={s.resumoLabel}>Na fila</Text>
         </View>
         <View style={s.resumoCard}>
-          <Text style={[s.resumoValor, {color: Colors.pulso}]}>2</Text>
+          <Text style={[s.resumoValor, {color: Colors.pulso}]}>{emAndamento.length}</Text>
           <Text style={s.resumoLabel}>Em andamento</Text>
         </View>
         <View style={s.resumoCard}>
-          <Text style={[s.resumoValor, {color: '#EF4444'}]}>{pedidos.filter(p => p.urgente).length}</Text>
-          <Text style={s.resumoLabel}>Urgentes</Text>
+          <Text style={[s.resumoValor, {color: '#86EFAC'}]}>{pedidos.filter(p => p.status === 'entregue').length}</Text>
+          <Text style={s.resumoLabel}>Entregues</Text>
         </View>
       </View>
 
@@ -73,15 +84,6 @@ export default function FilaScreen() {
         <Text style={s.searchIcon}>🔍</Text>
         <TextInput style={s.searchInput} placeholder="Buscar pedido..." placeholderTextColor={Colors.gray} value={busca} onChangeText={setBusca} />
       </View>
-
-      {/* Filtro por excursão */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filtrosScroll} contentContainerStyle={s.filtrosRow}>
-        {excursoes.map(e => (
-          <TouchableOpacity key={e} style={[s.filtroChip, filtroExcursao === e && s.filtroAtivo]} onPress={() => setFiltroExcursao(e)}>
-            <Text style={[s.filtroText, filtroExcursao === e && s.filtroTextAtivo]}>{e}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -92,18 +94,14 @@ export default function FilaScreen() {
           <View key={p.id} style={s.card}>
             <View style={s.cardContent}>
               <View style={s.cardTop}>
-                <Text style={s.pedidoId}>{p.id}</Text>
-                {p.urgente && <View style={s.urgente}><Text style={s.urgenteText}>URGENTE</Text></View>}
-                <Text style={s.tempoFila}>⏱️ {p.tempoFila}</Text>
+                <Text style={s.pedidoId}>#{p.numero}</Text>
               </View>
-              <Text style={s.cliente}>{p.cliente}</Text>
-              <Text style={s.empresa}>{p.empresa} · {p.volumes} vol.</Text>
-              <Text style={s.destino}>📍 {p.destino}</Text>
+              <Text style={s.cliente}>{p.cliente_nome}</Text>
+              <Text style={s.empresa}>{p.volumes} vol. · {p.descricao || 'Sem descrição'}</Text>
+              <Text style={s.destino}>📍 {p.excursao_nome}</Text>
             </View>
             <View style={s.actions}>
-              <TouchableOpacity
-                style={s.iniciarBtn}
-                onPress={() => navigation.navigate('Checklist', {pedidoId: p.id, etapa: 'coleta'})}>
+              <TouchableOpacity style={s.iniciarBtn} onPress={() => iniciarColeta(p)}>
                 <Text style={s.iniciarText}>Iniciar</Text>
               </TouchableOpacity>
             </View>
@@ -135,9 +133,6 @@ const s = StyleSheet.create({
   cardContent: {flex: 1},
   cardTop:     {flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4},
   pedidoId:    {fontSize: 16, fontWeight: '700', color: Colors.clareza},
-  urgente:     {backgroundColor: '#7F1D1D', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2},
-  urgenteText: {fontSize: 10, fontWeight: '700', color: '#FCA5A5'},
-  tempoFila:   {fontSize: 11, color: Colors.gray, marginLeft: 'auto'},
   cliente:     {fontSize: 14, color: Colors.clareza, marginBottom: 2},
   empresa:     {fontSize: 13, color: '#60A5FA', marginBottom: 2},
   destino:     {fontSize: 12, color: Colors.gray},
@@ -145,10 +140,4 @@ const s = StyleSheet.create({
   iniciarBtn:  {backgroundColor: Colors.pulso, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8},
   iniciarText: {color: Colors.matriz, fontWeight: '700', fontSize: 13},
   empty:       {textAlign: 'center', color: Colors.gray, marginTop: 40, fontSize: 15},
-  filtrosScroll:{maxHeight: 44, marginBottom: 10},
-  filtrosRow:   {paddingHorizontal: 24, gap: 8},
-  filtroChip:   {backgroundColor: '#162433', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: '#1E3448'},
-  filtroAtivo:  {backgroundColor: Colors.pulso + '20', borderColor: Colors.pulso},
-  filtroText:   {fontSize: 13, color: Colors.gray, fontWeight: '600'},
-  filtroTextAtivo:{color: Colors.pulso},
 });

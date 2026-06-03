@@ -1,36 +1,56 @@
 import React, {useState, useCallback} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Image, RefreshControl} from 'react-native';
-import {useNavigation} from '@react-navigation/native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, RefreshControl, ActivityIndicator} from 'react-native';
+import {useNavigation, useFocusEffect} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {DespachanteStackParamList} from '../../navigation/DespachanteNavigator';
 import {Colors} from '../../theme/colors';
-
-type PedidoAndamento = {
-  id: string; cliente: string; empresa: string; destino: string;
-  etapa: string; tempoDecorrido: string; volumes: number;
-  fotos: string[];
-};
-
-const emAndamento: PedidoAndamento[] = [
-  {id: '#0136', cliente: 'Carla Ramos', empresa: 'Trans Silva', destino: 'SP - Lote A', etapa: 'Em rota para excursão', tempoDecorrido: '32 min', volumes: 2, fotos: ['https://via.placeholder.com/200']},
-  {id: '#0134', cliente: 'Diego Pinto', empresa: 'Sul Cargas', destino: 'BH - Lote A', etapa: 'Coletado, saindo', tempoDecorrido: '15 min', volumes: 4, fotos: ['https://via.placeholder.com/200', 'https://via.placeholder.com/200']},
-];
+import {useAuth} from '../../context/AuthContext';
+import {listarPedidosDespachante, concluirEtapaPedido, PedidoData} from '../../services/api';
 
 export default function EmAndamentoScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<DespachanteStackParamList>>();
-  const [detalhe, setDetalhe] = useState<PedidoAndamento | null>(null);
+  const {despachante} = useAuth();
+  const [pedidos, setPedidos] = useState<PedidoData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [detalhe, setDetalhe] = useState<PedidoData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  const carregar = async () => {
+    if (!despachante?.id) return;
+    const res = await listarPedidosDespachante(despachante.id);
+    if (res.success && res.pedidos) setPedidos(res.pedidos.filter(p => p.status === 'em_transito'));
+  };
+
+  useFocusEffect(useCallback(() => {
+    setLoading(true);
+    carregar().finally(() => setLoading(false));
+  }, [despachante?.id]));
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
-  }, []);
+    carregar().finally(() => setRefreshing(false));
+  }, [despachante?.id]);
+
+  const confirmarEntrega = async (p: PedidoData) => {
+    // Conclui etapas restantes
+    const etapas = p.etapas || [];
+    for (const etapa of etapas) {
+      if (!etapa.concluida) {
+        await concluirEtapaPedido(p.id, etapa.id);
+      }
+    }
+    carregar();
+  };
+
+  if (loading) {
+    return <View style={[s.container, {justifyContent: 'center', alignItems: 'center'}]}><ActivityIndicator size="large" color={Colors.pulso} /></View>;
+  }
 
   return (
     <View style={s.container}>
       <View style={s.header}>
         <Text style={s.title}>Em Andamento</Text>
-        <View style={s.badge}><Text style={s.badgeText}>{emAndamento.length}</Text></View>
+        <View style={s.badge}><Text style={s.badgeText}>{pedidos.length}</Text></View>
       </View>
 
       <ScrollView
@@ -38,58 +58,53 @@ export default function EmAndamentoScreen() {
         contentContainerStyle={{padding: 24, paddingTop: 0, gap: 10}}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.pulso} />}
       >
-        {emAndamento.map(p => (
-          <View key={p.id} style={s.card}>
-            <View style={s.cardLeft}>
-              <View style={s.pulse} />
-            </View>
-            <View style={s.info}>
-              <View style={s.cardTop}>
-                <Text style={s.id}>{p.id} · {p.cliente}</Text>
-                <Text style={s.tempo}>⏱️ {p.tempoDecorrido}</Text>
+        {pedidos.map(p => {
+          const etapaAtual = p.etapas?.find(e => !e.concluida)?.nome || 'Em andamento';
+          return (
+            <View key={p.id} style={s.card}>
+              <View style={s.cardLeft}>
+                <View style={s.pulse} />
               </View>
-              <Text style={s.empresa}>{p.empresa} · {p.volumes} vol.</Text>
-              <Text style={s.etapa}>{p.etapa}</Text>
-              <Text style={s.destino}>📍 {p.destino}</Text>
+              <View style={s.info}>
+                <View style={s.cardTop}>
+                  <Text style={s.id}>#{p.numero} · {p.cliente_nome}</Text>
+                </View>
+                <Text style={s.empresa}>{p.volumes} vol.</Text>
+                <Text style={s.etapa}>{etapaAtual}</Text>
+                <Text style={s.destino}>📍 {p.excursao_nome}</Text>
+              </View>
+              <View style={s.actions}>
+                <TouchableOpacity style={s.entregarBtn} onPress={() => confirmarEntrega(p)}>
+                  <Text style={s.entregarText}>Entregar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setDetalhe(p)}>
+                  <Text style={s.verText}>Detalhes</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={s.actions}>
-              <TouchableOpacity
-                style={s.entregarBtn}
-                onPress={() => navigation.navigate('Checklist', {pedidoId: p.id, etapa: 'entrega'})}>
-                <Text style={s.entregarText}>Entregar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setDetalhe(p)}>
-                <Text style={s.verText}>Ver detalhes</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))}
-        {emAndamento.length === 0 && (
-          <Text style={s.empty}>Nenhum pedido em andamento</Text>
-        )}
+          );
+        })}
+        {pedidos.length === 0 && <Text style={s.empty}>Nenhum pedido em andamento</Text>}
       </ScrollView>
 
-      {/* Modal detalhes */}
       <Modal visible={!!detalhe} transparent animationType="slide">
         <View style={s.overlay}>
           <View style={s.sheet}>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={s.sheetTitle}>{detalhe?.id}</Text>
-              <View style={s.detRow}><Text style={s.detLabel}>Cliente</Text><Text style={s.detValue}>{detalhe?.cliente}</Text></View>
-              <View style={s.detRow}><Text style={s.detLabel}>Empresa</Text><Text style={s.detValue}>{detalhe?.empresa}</Text></View>
-              <View style={s.detRow}><Text style={s.detLabel}>Destino</Text><Text style={s.detValue}>{detalhe?.destino}</Text></View>
+              <Text style={s.sheetTitle}>#{detalhe?.numero}</Text>
+              <View style={s.detRow}><Text style={s.detLabel}>Cliente</Text><Text style={s.detValue}>{detalhe?.cliente_nome}</Text></View>
+              <View style={s.detRow}><Text style={s.detLabel}>Destino</Text><Text style={s.detValue}>{detalhe?.excursao_nome}</Text></View>
               <View style={s.detRow}><Text style={s.detLabel}>Volumes</Text><Text style={s.detValue}>{detalhe?.volumes}</Text></View>
-              <View style={s.detRow}><Text style={s.detLabel}>Etapa atual</Text><Text style={[s.detValue, {color: Colors.pulso}]}>{detalhe?.etapa}</Text></View>
-              <View style={s.detRow}><Text style={s.detLabel}>Tempo decorrido</Text><Text style={s.detValue}>{detalhe?.tempoDecorrido}</Text></View>
+              <View style={s.detRow}><Text style={s.detLabel}>Descrição</Text><Text style={s.detValue}>{detalhe?.descricao || '—'}</Text></View>
 
-              <Text style={s.sectionTitle}>Fotos tiradas ({detalhe?.fotos.length || 0})</Text>
-              {detalhe && detalhe.fotos.length > 0 ? (
-                <View style={s.fotosRow}>
-                  {detalhe.fotos.map((uri, i) => <Image key={i} source={{uri}} style={s.foto} />)}
+              <Text style={s.sectionTitle}>Etapas</Text>
+              {detalhe?.etapas?.map((etapa) => (
+                <View key={etapa.id} style={s.etapaRow}>
+                  <View style={[s.etapaDot, etapa.concluida && s.etapaDotDone]} />
+                  <Text style={[s.etapaNome, etapa.concluida && s.etapaNomeDone]}>{etapa.nome}</Text>
+                  {etapa.hora && <Text style={s.etapaHora}>{new Date(etapa.hora).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</Text>}
                 </View>
-              ) : (
-                <Text style={s.semFotos}>Nenhuma foto ainda</Text>
-              )}
+              ))}
 
               <TouchableOpacity style={s.closeBtn} onPress={() => setDetalhe(null)}>
                 <Text style={s.closeBtnText}>Fechar</Text>
@@ -114,7 +129,6 @@ const s = StyleSheet.create({
   info:        {flex: 1},
   cardTop:     {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
   id:          {fontSize: 14, fontWeight: '700', color: Colors.clareza},
-  tempo:       {fontSize: 11, color: Colors.gray},
   empresa:     {fontSize: 13, color: '#60A5FA', marginTop: 4},
   etapa:       {fontSize: 13, color: Colors.pulso, marginTop: 2},
   destino:     {fontSize: 12, color: Colors.gray, marginTop: 2},
@@ -130,9 +144,12 @@ const s = StyleSheet.create({
   detLabel:    {fontSize: 13, color: Colors.gray},
   detValue:    {fontSize: 13, fontWeight: '600', color: Colors.clareza},
   sectionTitle:{fontSize: 14, fontWeight: '700', color: Colors.pulso, marginTop: 20, marginBottom: 12},
-  fotosRow:    {flexDirection: 'row', flexWrap: 'wrap', gap: 10},
-  foto:        {width: 100, height: 100, borderRadius: 10},
-  semFotos:    {fontSize: 13, color: Colors.gray, fontStyle: 'italic'},
+  etapaRow:    {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8},
+  etapaDot:    {width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#1E3448', backgroundColor: '#0F1F2E'},
+  etapaDotDone:{backgroundColor: Colors.pulso, borderColor: Colors.pulso},
+  etapaNome:   {flex: 1, fontSize: 14, color: Colors.gray},
+  etapaNomeDone:{color: Colors.clareza, fontWeight: '600'},
+  etapaHora:   {fontSize: 12, color: Colors.gray},
   closeBtn:    {height: 52, backgroundColor: '#162433', borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 24, borderWidth: 1, borderColor: '#1E3448'},
   closeBtnText:{color: Colors.clareza, fontWeight: '600', fontSize: 15},
 });
