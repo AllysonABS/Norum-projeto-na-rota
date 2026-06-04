@@ -326,10 +326,30 @@ export async function criarPedido(empresaId: string, dados: {
   }
 }
 
+type PedidosEmpresaCache = {empresaId: string; pedidos: PedidoData[]; fetchedAt: number};
+let _pedidosEmpresaCache: PedidosEmpresaCache | null = null;
+const PEDIDOS_CACHE_TTL = 60000; // 60 segundos
+
+export function getCachedPedidosEmpresa(empresaId: string): PedidoData[] | null {
+  if (_pedidosEmpresaCache?.empresaId === empresaId &&
+      Date.now() - _pedidosEmpresaCache.fetchedAt < PEDIDOS_CACHE_TTL) {
+    return _pedidosEmpresaCache.pedidos;
+  }
+  return null;
+}
+
+export function invalidarCachePedidosEmpresa() {
+  _pedidosEmpresaCache = null;
+}
+
 export async function listarPedidosEmpresa(empresaId: string): Promise<{success: boolean; pedidos?: PedidoData[]; error?: string}> {
   try {
     const res = await fetch(`${API_URL}/api/empresa/${empresaId}/pedidos`, { headers: authHeaders() });
-    return await res.json();
+    const data = await res.json();
+    if (data.success && data.pedidos) {
+      _pedidosEmpresaCache = {empresaId, pedidos: data.pedidos, fetchedAt: Date.now()};
+    }
+    return data;
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
   }
@@ -398,6 +418,14 @@ export async function uploadFotoPedido(pedidoId: string, uri: string, etapa: str
     });
 
     if (!uploadRes.ok) return {success: false, error: 'Erro ao enviar foto.'};
+
+    // Confirma o upload no servidor apenas após sucesso no R2
+    await fetch(`${API_URL}/api/pedidos/${pedidoId}/confirmar-foto`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({url: presignData.publicUrl, etapa}),
+    });
+
     return {success: true, url: presignData.publicUrl};
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};

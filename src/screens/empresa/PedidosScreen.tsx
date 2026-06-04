@@ -10,7 +10,7 @@ import Icon from '../../components/Icon';
 import EmptyState from '../../components/EmptyState';
 import {SkeletonCard} from '../../components/Skeleton';
 import {hapticSuccess, hapticLight} from '../../utils/haptics';
-import {criarPedido, listarPedidosEmpresa, listarClientesEmpresa, listarDespachantes, listarExcursoes, PedidoData} from '../../services/api';
+import {criarPedido, listarPedidosEmpresa, getCachedPedidosEmpresa, invalidarCachePedidosEmpresa, listarClientesEmpresa, listarDespachantes, listarExcursoes, PedidoData} from '../../services/api';
 import {formatHora} from '../../utils/date';
 
 type Status = 'aguardando' | 'em_transito' | 'entregue';
@@ -122,11 +122,15 @@ export default function PedidosScreen() {
 
   useFocusEffect(useCallback(() => {
     if (!jaCarregou.current) {
-      setLoading(true);
-      carregar().finally(() => {
-        setLoading(false);
+      const cached = empresa?.id ? getCachedPedidosEmpresa(empresa.id) : null;
+      if (cached) {
+        setPedidos(cached);
         jaCarregou.current = true;
-      });
+        carregar();
+      } else {
+        setLoading(true);
+        carregar().finally(() => { setLoading(false); jaCarregou.current = true; });
+      }
     } else {
       carregar();
     }
@@ -163,6 +167,7 @@ export default function PedidosScreen() {
     setCriando(false);
     if (res.success) {
       hapticSuccess();
+      invalidarCachePedidosEmpresa();
       showToast('Pedido criado com sucesso!', 'success');
       setModalNovo(false);
       carregar();

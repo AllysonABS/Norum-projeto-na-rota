@@ -147,7 +147,7 @@ function sanitizeObj(obj: Record<string, any>): Record<string, any> {
 }
 
 function sanitizeBody(req: express.Request, _res: express.Response, next: express.NextFunction) {
-  if (req.body && typeof req.body === 'object') {
+  if (req.method !== 'GET' && req.method !== 'HEAD' && req.body && typeof req.body === 'object') {
     req.body = sanitizeObj(req.body);
   }
   next();
@@ -1055,6 +1055,10 @@ app.put('/api/cliente/:id/fcm-token', auth, async (req, res) => {
 app.get('/api/empresa/:empresaId/pedidos', auth, async (req, res) => {
   try {
     const {empresaId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa' || user.id !== empresaId) {
+      return res.status(403).json({error: 'Sem permissão.'});
+    }
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
     const offset = parseInt(req.query.offset as string) || 0;
     const result = await pool.query(
@@ -1234,16 +1238,37 @@ app.post('/api/pedidos/:pedidoId/upload-url', auth, async (req, res) => {
     const uploadUrl = await getSignedUrl(r2, command, { expiresIn: 300 });
     const publicUrl = `${R2_PUBLIC_URL}/${key}`;
 
-    // Já salva a referência no DB (foto aparece quando upload concluir)
-    await pool.query(
-      'INSERT INTO pedido_fotos (pedido_id, url, etapa) VALUES ($1, $2, $3)',
-      [pedidoId, publicUrl, etapa || 'geral']
-    );
-
+    // NÃO inserir aqui — o cliente confirma após upload bem-sucedido via /confirmar-foto
     res.json({ success: true, uploadUrl, publicUrl });
   } catch (err: any) {
     console.error('Erro ao gerar URL de upload:', err);
     res.status(500).json({error: 'Erro ao gerar URL.'});
+  }
+});
+
+// Confirmar foto após upload direto pro R2 (chamado pelo app após upload bem-sucedido)
+app.post('/api/pedidos/:pedidoId/confirmar-foto', auth, async (req, res) => {
+  try {
+    const {pedidoId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    const {url, etapa} = req.body;
+    if (!url) return res.status(400).json({error: 'URL da foto obrigatória.'});
+
+    const pedidoRes = await pool.query('SELECT empresa_id, despachante_id FROM pedidos WHERE id=$1', [pedidoId]);
+    if (pedidoRes.rows.length === 0) return res.status(404).json({error: 'Pedido não encontrado.'});
+    const {empresa_id, despachante_id} = pedidoRes.rows[0];
+    if (user.tipo === 'empresa' && empresa_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
+    if (user.tipo === 'despachante' && despachante_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
+    if (user.tipo === 'cliente') return res.status(403).json({error: 'Sem permissão.'});
+
+    await pool.query(
+      'INSERT INTO pedido_fotos (pedido_id, url, etapa) VALUES ($1, $2, $3)',
+      [pedidoId, url, etapa || 'geral']
+    );
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao confirmar foto:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });
 
