@@ -5,25 +5,13 @@ import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import {useAuth} from '../../context/AuthContext';
 import {listarNotificacoes, marcarNotificacoesLidas, NotificacaoData} from '../../services/api';
+import {tempoAtras} from '../../utils/date';
 
 const icones: Record<string, string> = {
   novo_vinculo: '🔗',
   novo_pedido: '📦',
   alerta: '⚠️',
 };
-
-function tempoAtras(data: string): string {
-  const agora = Date.now();
-  const criado = new Date(data).getTime();
-  const diff = agora - criado;
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return 'Agora';
-  if (min < 60) return `${min} min atrás`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h}h atrás`;
-  const d = Math.floor(h / 24);
-  return `${d}d atrás`;
-}
 
 export default function NotificacoesScreen() {
   const navigation = useNavigation();

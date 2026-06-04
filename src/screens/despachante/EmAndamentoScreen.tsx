@@ -5,7 +5,8 @@ import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {DespachanteStackParamList} from '../../navigation/DespachanteNavigator';
 import {Colors} from '../../theme/colors';
 import {useAuth} from '../../context/AuthContext';
-import {listarPedidosDespachante, concluirEtapaPedido, PedidoData} from '../../services/api';
+import {listarPedidosDespachante, PedidoData} from '../../services/api';
+import {formatHora} from '../../utils/date';
 
 export default function EmAndamentoScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<DespachanteStackParamList>>();
@@ -31,15 +32,8 @@ export default function EmAndamentoScreen() {
     carregar().finally(() => setRefreshing(false));
   }, [despachante?.id]);
 
-  const confirmarEntrega = async (p: PedidoData) => {
-    // Conclui etapas restantes
-    const etapas = p.etapas || [];
-    for (const etapa of etapas) {
-      if (!etapa.concluida) {
-        await concluirEtapaPedido(p.id, etapa.id);
-      }
-    }
-    carregar();
+  const confirmarEntrega = (p: PedidoData) => {
+    navigation.navigate('Checklist', {pedidoId: p.id, etapa: 'entrega'});
   };
 
   if (loading) {
@@ -102,7 +96,7 @@ export default function EmAndamentoScreen() {
                 <View key={etapa.id} style={s.etapaRow}>
                   <View style={[s.etapaDot, etapa.concluida && s.etapaDotDone]} />
                   <Text style={[s.etapaNome, etapa.concluida && s.etapaNomeDone]}>{etapa.nome}</Text>
-                  {etapa.hora && <Text style={s.etapaHora}>{new Date(etapa.hora).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</Text>}
+                  {etapa.hora && <Text style={s.etapaHora}>{formatHora(etapa.hora)}</Text>}
                 </View>
               ))}
 

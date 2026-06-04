@@ -265,6 +265,7 @@ export type PedidoData = {
   excursao_nome: string;
   volumes: number;
   descricao: string | null;
+  observacao?: string | null;
   status: 'aguardando' | 'em_transito' | 'entregue';
   criado_em: string;
   atualizado_em: string;
@@ -330,9 +331,41 @@ export async function atualizarStatusPedido(pedidoId: string, status: string): P
   }
 }
 
-export async function concluirEtapaPedido(pedidoId: string, etapaId: string): Promise<{success: boolean; error?: string}> {
+export async function concluirEtapaPedido(pedidoId: string, tipo: string): Promise<{success: boolean; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/etapas/${etapaId}/concluir`, {method: 'PUT'});
+    const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/concluir-etapas`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({tipo}),
+    });
+    return await res.json();
+  } catch {
+    return {success: false, error: 'Erro de conexão com o servidor.'};
+  }
+}
+
+export async function uploadFotoPedido(pedidoId: string, uri: string, etapa: string): Promise<{success: boolean; url?: string; error?: string}> {
+  try {
+    const formData = new FormData();
+    formData.append('foto', {uri, name: 'foto.jpg', type: 'image/jpeg'} as any);
+    formData.append('etapa', etapa);
+    const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/fotos`, {
+      method: 'POST',
+      body: formData,
+    });
+    return await res.json();
+  } catch {
+    return {success: false, error: 'Erro de conexão com o servidor.'};
+  }
+}
+
+export async function salvarObservacaoPedido(pedidoId: string, observacao: string): Promise<{success: boolean; error?: string}> {
+  try {
+    const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/observacao`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({observacao}),
+    });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};

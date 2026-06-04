@@ -9,6 +9,7 @@ import Toast, {useToast} from '../../components/Toast';
 import {useAuth} from '../../context/AuthContext';
 import {atualizarCliente, listarMinhasLojas, alterarSenhaCliente, listarPedidosCliente} from '../../services/api';
 import {useAlert} from '../../components/CustomAlert';
+import {formatDataMesAno} from '../../utils/date';
 
 function maskCpf(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 11);
@@ -180,7 +181,7 @@ export default function PerfilScreen() {
             <Text style={s.resumoLabel}>Lojas</Text>
           </View>
           <View style={s.resumoCard}>
-            <Text style={s.resumoValor}>{cliente?.data_cadastro ? new Date(cliente.data_cadastro).toLocaleDateString('pt-BR', {month: 'short', year: 'numeric'}) : '—'}</Text>
+            <Text style={s.resumoValor}>{cliente?.data_cadastro ? formatDataMesAno(cliente.data_cadastro) : '—'}</Text>
             <Text style={s.resumoLabel}>Cliente desde</Text>
           </View>
         </View>

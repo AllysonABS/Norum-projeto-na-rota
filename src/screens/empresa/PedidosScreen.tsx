@@ -5,7 +5,9 @@ import {Colors} from '../../theme/colors';
 import Toast, {useToast} from '../../components/Toast';
 import {useAlert} from '../../components/CustomAlert';
 import {useAuth} from '../../context/AuthContext';
+import PhotoGallery from '../../components/PhotoGallery';
 import {criarPedido, listarPedidosEmpresa, listarClientesEmpresa, listarDespachantes, listarExcursoes, PedidoData} from '../../services/api';
+import {formatHora} from '../../utils/date';
 
 type Status = 'aguardando' | 'em_transito' | 'entregue';
 
@@ -200,10 +202,24 @@ export default function PedidosScreen() {
                   {i < (detalhe.etapas?.length ?? 0) - 1 && <View style={[s.etapaLine, etapa.concluida && s.etapaLineDone]} />}
                   <View style={s.etapaInfo}>
                     <Text style={[s.etapaNome, etapa.concluida && s.etapaNomeDone]}>{etapa.nome}</Text>
-                    {etapa.hora && <Text style={s.etapaHora}>{new Date(etapa.hora).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</Text>}
+                    {etapa.hora && <Text style={s.etapaHora}>{formatHora(etapa.hora)}</Text>}
                   </View>
                 </View>
               ))}
+
+              {detalhe?.fotos && detalhe.fotos.length > 0 && (
+                <>
+                  <Text style={s.sectionTitle}>Fotos ({detalhe.fotos.length})</Text>
+                  <PhotoGallery fotos={detalhe.fotos} />
+                </>
+              )}
+
+              {detalhe?.observacao ? (
+                <>
+                  <Text style={s.sectionTitle}>Observação</Text>
+                  <Text style={s.obsText}>{detalhe.observacao}</Text>
+                </>
+              ) : null}
 
               <TouchableOpacity style={s.closeBtn} onPress={() => setDetalhe(null)}>
                 <Text style={s.closeBtnText}>Fechar</Text>
@@ -334,6 +350,9 @@ const s = StyleSheet.create({
   etapaHora:    {fontSize: 12, color: Colors.gray, marginTop: 2},
   closeBtn:     {height: 52, backgroundColor: '#162433', borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 24, borderWidth: 1, borderColor: '#1E3448'},
   closeBtnText: {color: Colors.clareza, fontWeight: '600', fontSize: 15},
+  fotosRow:     {flexDirection: 'row', flexWrap: 'wrap', gap: 10},
+  foto:         {width: 100, height: 100, borderRadius: 10},
+  obsText:      {fontSize: 14, color: Colors.clareza, lineHeight: 20},
   label:        {fontSize: 13, fontWeight: '600', color: Colors.gray, marginBottom: 6, marginTop: 12},
   input:        {height: 50, backgroundColor: '#162433', borderRadius: 8, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 16, color: Colors.clareza, fontSize: 15},
   selectBtn:    {height: 50, backgroundColor: '#162433', borderRadius: 8, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},

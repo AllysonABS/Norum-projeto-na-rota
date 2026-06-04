@@ -4,6 +4,7 @@ import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import {useAuth} from '../../context/AuthContext';
 import {listarPedidosDespachante, PedidoData} from '../../services/api';
+import {formatHora, formatData} from '../../utils/date';
 
 export default function HistoricoScreen() {
   const {despachante} = useAuth();
@@ -79,7 +80,7 @@ export default function HistoricoScreen() {
               <Text style={s.destino}>📍 {p.excursao_nome}</Text>
             </View>
             <View style={s.right}>
-              <Text style={s.data}>{new Date(p.atualizado_em).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}</Text>
+              <Text style={s.data}>{formatData(p.atualizado_em)}</Text>
             </View>
           </TouchableOpacity>
         ))}
@@ -101,7 +102,7 @@ export default function HistoricoScreen() {
                 <View key={etapa.id} style={s.etapaRow}>
                   <View style={[s.etapaDot, etapa.concluida && s.etapaDotDone]} />
                   <Text style={[s.etapaNome, etapa.concluida && s.etapaNomeDone]}>{etapa.nome}</Text>
-                  {etapa.hora && <Text style={s.etapaHora}>{new Date(etapa.hora).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</Text>}
+                  {etapa.hora && <Text style={s.etapaHora}>{formatHora(etapa.hora)}</Text>}
                 </View>
               ))}
 

@@ -6,7 +6,7 @@ import {DespachanteStackParamList} from '../../navigation/DespachanteNavigator';
 import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
 import {useAuth} from '../../context/AuthContext';
-import {listarPedidosDespachante, atualizarStatusPedido, concluirEtapaPedido, PedidoData} from '../../services/api';
+import {listarPedidosDespachante, PedidoData} from '../../services/api';
 
 export default function FilaScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<DespachanteStackParamList>>();
@@ -36,12 +36,8 @@ export default function FilaScreen() {
   const fila = pedidos.filter(p => p.status === 'aguardando');
   const emAndamento = pedidos.filter(p => p.status === 'em_transito');
 
-  const iniciarColeta = async (p: PedidoData) => {
-    // Conclui etapa "Coleta realizada" e muda status para em_transito
-    const etapaColeta = p.etapas?.find(e => e.nome === 'Coleta realizada' && !e.concluida);
-    if (etapaColeta) await concluirEtapaPedido(p.id, etapaColeta.id);
-    await atualizarStatusPedido(p.id, 'em_transito');
-    carregar();
+  const iniciarColeta = (p: PedidoData) => {
+    navigation.navigate('Checklist', {pedidoId: p.id, etapa: 'coleta'});
   };
 
   const filtrados = fila.filter(p => {

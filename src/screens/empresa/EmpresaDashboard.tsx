@@ -7,6 +7,7 @@ import {Colors} from '../../theme/colors';
 import {useAuth} from '../../context/AuthContext';
 import {contarNotificacoesNaoLidas, listarPedidosEmpresa, listarClientesEmpresa, listarDespachantes, listarExcursoes, PedidoData} from '../../services/api';
 import {requestNotificationPermission, getFCMToken, registrarTokenEmpresa, onForegroundMessage} from '../../services/notifications';
+import {formatHora} from '../../utils/date';
 
 const getGreeting = () => {
   const h = new Date().getHours();

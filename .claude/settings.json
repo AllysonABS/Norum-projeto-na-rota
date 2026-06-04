@@ -5,7 +5,20 @@
       "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); print\\(json.dumps\\({'peerDependencies': data.get\\('peerDependencies',{}\\), 'peerDependenciesMeta': data.get\\('peerDependenciesMeta',{}\\)}, indent=2\\)\\)\")",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('types:', d.get\\('types'\\), 'typings:', d.get\\('typings'\\), 'main:', d.get\\('main'\\)\\)\")",
       "Bash(xargs -I{} basename {} .d.ts)",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d['version']\\)\")"
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d['version']\\)\")",
+      "Bash(wrangler --version)",
+      "Bash(rclone --version)",
+      "Bash(aws s3 *)",
+      "Bash(AWS_ACCESS_KEY_ID=ae3b2c4c0699ec53144b71817919d484 AWS_SECRET_ACCESS_KEY=6a77866733f72eda0d6a845a208d893ed84b5339d7a488689e73af0de1d288ae aws s3 ls s3://unikcrm --endpoint-url https://aeb8f8047f7934c00f0e7f04d451e7f2.r2.cloudflarestorage.com --recursive --human-readable --summarize)",
+      "Bash(awk '{print $NF}')",
+      "Bash(grep -oE '\\\\.[a-zA-Z0-9]+$')",
+      "Bash(grep -oE '\\\\.[^./]+$')",
+      "Bash(grep -v \"^Total\\\\|^ Total\\\\|^$\")",
+      "Bash(awk '{print $1}')",
+      "Bash(awk '{sum += $3} END {print \"Arquivos de abril para deletar:\", NR, \"arquivos\"; print \"Tamanho aproximado: calculando...\"}')",
+      "Bash(split -l 1000 /tmp/r2_delete_list.txt /tmp/r2_batch_)",
+      "Bash(awk '{ *)",
+      "Bash(grep '\\\\.pdf$')"
     ]
   }
 }

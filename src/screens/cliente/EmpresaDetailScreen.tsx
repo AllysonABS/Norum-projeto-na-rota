@@ -1,10 +1,12 @@
 import React, {useState} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Linking, ActivityIndicator} from 'react-native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Linking, ActivityIndicator, Image} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import StatusBadge from '../../components/StatusBadge';
 import {useAuth} from '../../context/AuthContext';
 import {desvincularLoja, listarPedidosCliente, PedidoData} from '../../services/api';
+import PhotoGallery from '../../components/PhotoGallery';
+import {formatHora, formatData} from '../../utils/date';
 
 export default function EmpresaDetailScreen({route, navigation}: any) {
   const {empresa} = route.params;
@@ -118,7 +120,7 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
                   <View style={s.pedidoLeft}>
                     <View style={s.pedidoIdRow}>
                       <Text style={s.pedidoId}>#{p.numero}</Text>
-                      <Text style={s.pedidoData}>{new Date(p.criado_em).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}</Text>
+                      <Text style={s.pedidoData}>{formatData(p.criado_em)}</Text>
                     </View>
                     <Text style={s.pedidoExcursao}>{p.excursao_nome}</Text>
                   </View>
@@ -178,11 +180,18 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
                   {i < (selecionado.etapas?.length ?? 0) - 1 && <View style={s.timelineBar} />}
                 </View>
                 <View style={s.timelineText}>
-                  {t.hora && <Text style={s.timelineHora}>{new Date(t.hora).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</Text>}
+                  {t.hora && <Text style={s.timelineHora}>{formatHora(t.hora)}</Text>}
                   <Text style={s.timelineEvento}>{t.nome}</Text>
                 </View>
               </View>
             ))}
+
+            {selecionado?.fotos && selecionado.fotos.length > 0 && (
+              <>
+                <Text style={s.timelineTitle}>Fotos ({selecionado.fotos.length})</Text>
+                <PhotoGallery fotos={selecionado.fotos} />
+              </>
+            )}
 
             <TouchableOpacity style={s.closeBtn} onPress={() => setSelecionado(null)}>
               <Text style={s.closeBtnText}>Fechar</Text>
@@ -243,6 +252,8 @@ const s = StyleSheet.create({
   timelineEvento: {fontSize: 14, color: Colors.clareza, fontWeight: '500'},
   closeBtn: {height: 52, backgroundColor: '#162433', borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 12, borderWidth: 1, borderColor: '#1E3448'},
   closeBtnText: {color: Colors.clareza, fontWeight: '600', fontSize: 15},
+  fotosRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 10},
+  foto: {width: 100, height: 100, borderRadius: 10},
   desvincularBtn: {height: 52, backgroundColor: '#162433', borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#EF4444'},
   desvincularText: {color: '#EF4444', fontWeight: '700', fontSize: 15},
   confirmSheet: {backgroundColor: '#0F1F2E', borderRadius: 20, padding: 28, marginHorizontal: 32, alignItems: 'center'},

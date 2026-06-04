@@ -1,11 +1,13 @@
 import React, {useState, useCallback, useEffect} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, RefreshControl, ActivityIndicator} from 'react-native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, RefreshControl, ActivityIndicator, Image} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import StatusBadge from '../../components/StatusBadge';
 import {useAuth} from '../../context/AuthContext';
 import {listarPedidosCliente, PedidoData} from '../../services/api';
 import {requestNotificationPermission, getFCMToken, registrarTokenCliente} from '../../services/notifications';
+import PhotoGallery from '../../components/PhotoGallery';
+import {formatHora} from '../../utils/date';
 
 type Status = 'aguardando' | 'em_transito' | 'entregue';
 
@@ -142,11 +144,18 @@ export default function PedidosScreen() {
                     {i < (selecionado.etapas?.length ?? 0) - 1 && <View style={s.timelineBar} />}
                   </View>
                   <View style={s.timelineText}>
-                    {t.hora && <Text style={s.timelineHora}>{new Date(t.hora).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</Text>}
+                    {t.hora && <Text style={s.timelineHora}>{formatHora(t.hora)}</Text>}
                     <Text style={s.timelineEvento}>{t.nome}</Text>
                   </View>
                 </View>
               ))}
+
+              {selecionado?.fotos && selecionado.fotos.length > 0 && (
+                <>
+                  <Text style={s.sectionTitle}>Fotos ({selecionado.fotos.length})</Text>
+                  <PhotoGallery fotos={selecionado.fotos} />
+                </>
+              )}
 
               <TouchableOpacity style={s.closeBtn} onPress={() => setSelecionado(null)}>
                 <Text style={s.closeBtnText}>Fechar</Text>
@@ -197,4 +206,6 @@ const s = StyleSheet.create({
   timelineEvento: {fontSize: 14, color: Colors.clareza, fontWeight: '500'},
   closeBtn:       {height: 52, backgroundColor: '#162433', borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 20, borderWidth: 1, borderColor: '#1E3448'},
   closeBtnText:   {color: Colors.clareza, fontWeight: '600', fontSize: 15},
+  fotosRow:       {flexDirection: 'row', flexWrap: 'wrap', gap: 10},
+  foto:           {width: 100, height: 100, borderRadius: 10},
 });
