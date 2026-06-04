@@ -63,7 +63,7 @@ if (existsSync(firebaseKeyPath)) {
 
 // === RATE LIMITING (in-memory, simples) ===
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT || '10000'); // req/min por IP
+const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT || '200'); // req/min por IP
 
 function rateLimiter(req: express.Request, res: express.Response, next: express.NextFunction) {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
