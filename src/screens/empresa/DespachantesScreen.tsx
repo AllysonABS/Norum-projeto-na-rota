@@ -176,7 +176,7 @@ export default function DespachantesScreen() {
             <Text style={s.label}>Telefone</Text>
             <TextInput style={s.input} placeholder="(00) 00000-0000" placeholderTextColor={Colors.gray} value={telefone} onChangeText={setTelefone} keyboardType="phone-pad" />
             <Text style={s.label}>{editandoId ? 'Nova senha (deixe vazio para manter)' : 'Senha de acesso *'}</Text>
-            <TextInput style={s.input} placeholder="Mínimo 6 caracteres" placeholderTextColor={Colors.gray} value={senha} onChangeText={setSenha} secureTextEntry />
+            <TextInput style={s.input} placeholder="Min 8 chars, 1 maiúscula, 1 número" placeholderTextColor={Colors.gray} value={senha} onChangeText={setSenha} secureTextEntry />
             <View style={s.btnRow}>
               <TouchableOpacity style={s.cancelBtn} onPress={() => {limpar(); setModal(false);}}>
                 <Text style={s.cancelBtnText}>Cancelar</Text>

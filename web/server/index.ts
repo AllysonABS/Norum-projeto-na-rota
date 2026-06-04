@@ -651,6 +651,8 @@ app.post('/api/cliente/:clienteId/vincular/:empresaId', auth, async (req, res) =
 app.put('/api/empresa/:id/fcm-token', auth, async (req, res) => {
   try {
     const {id} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa' || user.id !== id) return res.status(403).json({error: 'Sem permissão.'});
     const {token} = req.body;
     if (!token) return res.status(400).json({error: 'Token obrigatório.'});
     await pool.query(
@@ -669,6 +671,8 @@ app.put('/api/empresa/:id/fcm-token', auth, async (req, res) => {
 app.get('/api/empresa/:id/notificacoes', auth, async (req, res) => {
   try {
     const {id} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa' || user.id !== id) return res.status(403).json({error: 'Sem permissão.'});
     const result = await pool.query(
       'SELECT id, tipo, titulo, mensagem, dados, lida, criado_em FROM notificacoes WHERE empresa_id=$1 ORDER BY criado_em DESC LIMIT 50',
       [id]
@@ -684,6 +688,8 @@ app.get('/api/empresa/:id/notificacoes', auth, async (req, res) => {
 app.get('/api/empresa/:id/notificacoes/nao-lidas', auth, async (req, res) => {
   try {
     const {id} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa' || user.id !== id) return res.status(403).json({error: 'Sem permissão.'});
     const result = await pool.query(
       'SELECT COUNT(*)::int as total FROM notificacoes WHERE empresa_id=$1 AND lida=false',
       [id]
@@ -699,6 +705,8 @@ app.get('/api/empresa/:id/notificacoes/nao-lidas', auth, async (req, res) => {
 app.put('/api/empresa/:id/notificacoes/marcar-lidas', auth, async (req, res) => {
   try {
     const {id} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa' || user.id !== id) return res.status(403).json({error: 'Sem permissão.'});
     await pool.query('UPDATE notificacoes SET lida=true WHERE empresa_id=$1 AND lida=false', [id]);
     res.json({success: true});
   } catch (err: any) {
@@ -730,6 +738,8 @@ app.delete('/api/cliente/:clienteId/desvincular/:empresaId', auth, async (req, r
 app.get('/api/empresa/:id/clientes', auth, async (req, res) => {
   try {
     const {id} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa' || user.id !== id) return res.status(403).json({error: 'Sem permissão.'});
     const result = await pool.query(
       `SELECT ce.id as vinculo_id, ce.status, ce.nome, ce.cpf, ce.cnpj, ce.rg, ce.telefone, ce.email,
               ce.data_nascimento, ce.cep, ce.endereco, ce.cidade, ce.estado, ce.observacoes, ce.data_vinculo,
@@ -761,6 +771,11 @@ app.get('/api/empresa/:id/clientes', auth, async (req, res) => {
 app.put('/api/empresa/vinculo/:vinculoId', auth, async (req, res) => {
   try {
     const {vinculoId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa') return res.status(403).json({error: 'Sem permissão.'});
+    const owner = await pool.query('SELECT empresa_id FROM cliente_empresa WHERE id=$1', [vinculoId]);
+    if (owner.rows.length === 0) return res.status(404).json({error: 'Vínculo não encontrado.'});
+    if (owner.rows[0].empresa_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
     const {nome, cpf, cnpj, rg, telefone, email, data_nascimento, cep, endereco, cidade, estado, observacoes} = req.body;
     await pool.query(
       `UPDATE cliente_empresa SET nome=$1, cpf=$2, cnpj=$3, rg=$4, telefone=$5, email=$6,
@@ -778,6 +793,11 @@ app.put('/api/empresa/vinculo/:vinculoId', auth, async (req, res) => {
 app.put('/api/empresa/vinculo/:vinculoId/bloquear', auth, async (req, res) => {
   try {
     const {vinculoId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa') return res.status(403).json({error: 'Sem permissão.'});
+    const owner = await pool.query('SELECT empresa_id FROM cliente_empresa WHERE id=$1', [vinculoId]);
+    if (owner.rows.length === 0) return res.status(404).json({error: 'Vínculo não encontrado.'});
+    if (owner.rows[0].empresa_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
     await pool.query('UPDATE cliente_empresa SET status=$1 WHERE id=$2', ['bloqueado', vinculoId]);
     res.json({success: true});
   } catch (err: any) {
@@ -790,6 +810,11 @@ app.put('/api/empresa/vinculo/:vinculoId/bloquear', auth, async (req, res) => {
 app.delete('/api/empresa/vinculo/:vinculoId', auth, async (req, res) => {
   try {
     const {vinculoId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa') return res.status(403).json({error: 'Sem permissão.'});
+    const owner = await pool.query('SELECT empresa_id FROM cliente_empresa WHERE id=$1', [vinculoId]);
+    if (owner.rows.length === 0) return res.status(404).json({error: 'Vínculo não encontrado.'});
+    if (owner.rows[0].empresa_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
     await pool.query('DELETE FROM cliente_empresa WHERE id=$1', [vinculoId]);
     res.json({success: true});
   } catch (err: any) {
@@ -804,6 +829,8 @@ app.delete('/api/empresa/vinculo/:vinculoId', auth, async (req, res) => {
 app.get('/api/empresa/:id/despachantes', auth, async (req, res) => {
   try {
     const {id} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa' || user.id !== id) return res.status(403).json({error: 'Sem permissão.'});
     const result = await pool.query(
       `SELECT d.id, d.nome, d.cpf, d.telefone, de.ativo
        FROM despachante_empresa de JOIN despachantes d ON d.id = de.despachante_id
@@ -827,6 +854,10 @@ app.post('/api/empresa/:id/despachantes', auth, async (req, res) => {
     const {nome, cpf, telefone, senha} = req.body;
     if (!nome || !cpf || !senha) {
       return res.status(400).json({error: 'Preencha nome, CPF e senha.'});
+    }
+    const senhaCheck = isStrongPassword(senha);
+    if (!senhaCheck.valid) {
+      return res.status(400).json({error: senhaCheck.message});
     }
     const cpfLimpo = cpf.replace(/\D/g, '');
     // Verifica se já existe despachante com esse CPF
@@ -859,9 +890,16 @@ app.post('/api/empresa/:id/despachantes', auth, async (req, res) => {
 app.put('/api/despachantes/:despachanteId', auth, async (req, res) => {
   try {
     const {despachanteId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa') return res.status(403).json({error: 'Sem permissão.'});
+    // Verifica se despachante está vinculado à empresa do usuário
+    const vinculo = await pool.query('SELECT id FROM despachante_empresa WHERE despachante_id=$1 AND empresa_id=$2', [despachanteId, user.id]);
+    if (vinculo.rows.length === 0) return res.status(403).json({error: 'Sem permissão.'});
     const {nome, cpf, telefone, senha} = req.body;
     const cpfLimpo = cpf ? cpf.replace(/\D/g, '') : '';
     if (senha) {
+      const senhaCheck = isStrongPassword(senha);
+      if (!senhaCheck.valid) return res.status(400).json({error: senhaCheck.message});
       const senha_hash = await bcrypt.hash(senha, 10);
       await pool.query('UPDATE despachantes SET nome=$1, cpf=$2, telefone=$3, senha_hash=$4 WHERE id=$5', [nome, cpfLimpo, telefone || null, senha_hash, despachanteId]);
     } else {
@@ -869,7 +907,7 @@ app.put('/api/despachantes/:despachanteId', auth, async (req, res) => {
     }
     res.json({success: true});
   } catch (err: any) {
-    console.error('Erro ao atualizar despachante:', err);
+    console.error('Erro ao atualizar despachante:', err.message);
     res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });
@@ -997,6 +1035,8 @@ app.post('/api/empresa/:empresaId/pedidos', auth, async (req, res) => {
 app.put('/api/cliente/:id/fcm-token', auth, async (req, res) => {
   try {
     const {id} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'cliente' || user.id !== id) return res.status(403).json({error: 'Sem permissão.'});
     const {token} = req.body;
     if (!token) return res.status(400).json({error: 'Token obrigat\u00f3rio.'});
     await pool.query(
@@ -1079,11 +1119,23 @@ app.get('/api/despachante/:despachanteId/pedidos', auth, async (req, res) => {
 app.put('/api/pedidos/:pedidoId/status', auth, async (req, res) => {
   try {
     const {pedidoId} = req.params;
+    const user = (req as any).user as TokenPayload;
     const {status} = req.body;
+    const allowedStatuses = ['aguardando', 'em_transito', 'entregue'];
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({error: 'Status inválido.'});
+    }
+    // Verifica ownership
+    const pedido = await pool.query('SELECT empresa_id, despachante_id FROM pedidos WHERE id=$1', [pedidoId]);
+    if (pedido.rows.length === 0) return res.status(404).json({error: 'Pedido não encontrado.'});
+    const p = pedido.rows[0];
+    if (user.tipo === 'empresa' && p.empresa_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
+    if (user.tipo === 'despachante' && p.despachante_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
+    if (user.tipo === 'cliente') return res.status(403).json({error: 'Sem permissão.'});
     await pool.query('UPDATE pedidos SET status=$1, atualizado_em=NOW() WHERE id=$2', [status, pedidoId]);
     res.json({success: true});
   } catch (err: any) {
-    console.error('Erro ao atualizar status:', err);
+    console.error('Erro ao atualizar status:', err.message);
     res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });
@@ -1092,6 +1144,13 @@ app.put('/api/pedidos/:pedidoId/status', auth, async (req, res) => {
 app.put('/api/pedidos/:pedidoId/etapas/:etapaId/concluir', auth, async (req, res) => {
   try {
     const {pedidoId, etapaId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    const pedido = await pool.query('SELECT empresa_id, despachante_id FROM pedidos WHERE id=$1', [pedidoId]);
+    if (pedido.rows.length === 0) return res.status(404).json({error: 'Pedido não encontrado.'});
+    const p = pedido.rows[0];
+    if (user.tipo === 'empresa' && p.empresa_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
+    if (user.tipo === 'despachante' && p.despachante_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
+    if (user.tipo === 'cliente') return res.status(403).json({error: 'Sem permissão.'});
     await pool.query('UPDATE pedido_etapas SET concluida=true, hora=NOW() WHERE id=$1 AND pedido_id=$2', [etapaId, pedidoId]);
     const total = await pool.query('SELECT COUNT(*)::int as total FROM pedido_etapas WHERE pedido_id=$1', [pedidoId]);
     const concluidas = await pool.query('SELECT COUNT(*)::int as total FROM pedido_etapas WHERE pedido_id=$1 AND concluida=true', [pedidoId]);
@@ -1111,6 +1170,13 @@ app.put('/api/pedidos/:pedidoId/etapas/:etapaId/concluir', auth, async (req, res
 app.put('/api/pedidos/:pedidoId/concluir-etapas', auth, async (req, res) => {
   try {
     const {pedidoId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    const pedido = await pool.query('SELECT empresa_id, despachante_id FROM pedidos WHERE id=$1', [pedidoId]);
+    if (pedido.rows.length === 0) return res.status(404).json({error: 'Pedido não encontrado.'});
+    const p = pedido.rows[0];
+    if (user.tipo === 'empresa' && p.empresa_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
+    if (user.tipo === 'despachante' && p.despachante_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
+    if (user.tipo === 'cliente') return res.status(403).json({error: 'Sem permissão.'});
     const {tipo} = req.body; // 'coleta' ou 'entrega'
     if (tipo === 'coleta') {
       // Marca "Coleta realizada" e "Em rota para excurs\u00e3o"
@@ -1138,6 +1204,7 @@ app.put('/api/pedidos/:pedidoId/concluir-etapas', auth, async (req, res) => {
 app.post('/api/pedidos/:pedidoId/upload-url', auth, async (req, res) => {
   try {
     const {pedidoId} = req.params;
+    const user = (req as any).user as TokenPayload;
     const {etapa, contentType, ext} = req.body;
 
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
@@ -1149,9 +1216,12 @@ app.post('/api/pedidos/:pedidoId/upload-url', auth, async (req, res) => {
       return res.status(400).json({error: 'Extensão de arquivo não permitida.'});
     }
 
-    const pedidoRes = await pool.query('SELECT empresa_id, cliente_nome FROM pedidos WHERE id=$1', [pedidoId]);
+    const pedidoRes = await pool.query('SELECT empresa_id, despachante_id, cliente_nome FROM pedidos WHERE id=$1', [pedidoId]);
     if (pedidoRes.rows.length === 0) return res.status(404).json({error: 'Pedido não encontrado.'});
-    const {empresa_id, cliente_nome} = pedidoRes.rows[0];
+    const {empresa_id, despachante_id, cliente_nome} = pedidoRes.rows[0];
+    if (user.tipo === 'empresa' && empresa_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
+    if (user.tipo === 'despachante' && despachante_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
+    if (user.tipo === 'cliente') return res.status(403).json({error: 'Sem permissão.'});
     const clienteSlug = (cliente_nome || 'sem-cliente').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
 
     const key = `${empresa_id}/${clienteSlug}/${pedidoId}/${crypto.randomUUID()}.${ext || 'jpg'}`;
@@ -1181,13 +1251,17 @@ app.post('/api/pedidos/:pedidoId/upload-url', auth, async (req, res) => {
 app.post('/api/pedidos/:pedidoId/fotos', auth, upload.single('foto'), async (req, res) => {
   try {
     const {pedidoId} = req.params;
+    const user = (req as any).user as TokenPayload;
     const etapa = req.body.etapa || 'geral';
     const file = req.file;
     if (!file) return res.status(400).json({error: 'Nenhuma foto enviada.'});
 
-    const pedidoRes = await pool.query('SELECT empresa_id, cliente_nome FROM pedidos WHERE id=$1', [pedidoId]);
+    const pedidoRes = await pool.query('SELECT empresa_id, despachante_id, cliente_nome FROM pedidos WHERE id=$1', [pedidoId]);
     if (pedidoRes.rows.length === 0) return res.status(404).json({error: 'Pedido não encontrado.'});
-    const {empresa_id, cliente_nome} = pedidoRes.rows[0];
+    const {empresa_id, despachante_id, cliente_nome} = pedidoRes.rows[0];
+    if (user.tipo === 'empresa' && empresa_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
+    if (user.tipo === 'despachante' && despachante_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
+    if (user.tipo === 'cliente') return res.status(403).json({error: 'Sem permissão.'});
     const clienteSlug = (cliente_nome || 'sem-cliente').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
 
     const ext = file.originalname.split('.').pop() || 'jpg';
@@ -1216,6 +1290,13 @@ app.post('/api/pedidos/:pedidoId/fotos', auth, upload.single('foto'), async (req
 app.put('/api/pedidos/:pedidoId/observacao', auth, async (req, res) => {
   try {
     const {pedidoId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    const pedido = await pool.query('SELECT empresa_id, despachante_id FROM pedidos WHERE id=$1', [pedidoId]);
+    if (pedido.rows.length === 0) return res.status(404).json({error: 'Pedido não encontrado.'});
+    const p = pedido.rows[0];
+    if (user.tipo === 'despachante' && p.despachante_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
+    if (user.tipo === 'empresa' && p.empresa_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
+    if (user.tipo === 'cliente') return res.status(403).json({error: 'Sem permissão.'});
     const {observacao} = req.body;
     await pool.query('UPDATE pedidos SET observacao=$1, atualizado_em=NOW() WHERE id=$2', [observacao || null, pedidoId]);
     res.json({success: true});
@@ -1231,6 +1312,8 @@ app.put('/api/pedidos/:pedidoId/observacao', auth, async (req, res) => {
 app.get('/api/empresa/:id/excursoes', auth, async (req, res) => {
   try {
     const {id} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa' || user.id !== id) return res.status(403).json({error: 'Sem permissão.'});
     const result = await pool.query(
       'SELECT id, nome, setor, vaga, responsavel, telefone FROM excursoes WHERE empresa_id=$1 ORDER BY data_cadastro DESC', [id]
     );
@@ -1268,6 +1351,12 @@ app.post('/api/empresa/:id/excursoes', auth, async (req, res) => {
 app.put('/api/excursoes/:excursaoId', auth, async (req, res) => {
   try {
     const {excursaoId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa') return res.status(403).json({error: 'Sem permissão.'});
+    // Verifica ownership
+    const owner = await pool.query('SELECT empresa_id FROM excursoes WHERE id=$1', [excursaoId]);
+    if (owner.rows.length === 0) return res.status(404).json({error: 'Excursão não encontrada.'});
+    if (owner.rows[0].empresa_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
     const {nome, setor, vaga, responsavel, telefone} = req.body;
     await pool.query(
       'UPDATE excursoes SET nome=$1, setor=$2, vaga=$3, responsavel=$4, telefone=$5 WHERE id=$6',
@@ -1275,7 +1364,7 @@ app.put('/api/excursoes/:excursaoId', auth, async (req, res) => {
     );
     res.json({success: true});
   } catch (err: any) {
-    console.error('Erro ao atualizar excursão:', err);
+    console.error('Erro ao atualizar excursão:', err.message);
     res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });
@@ -1284,10 +1373,15 @@ app.put('/api/excursoes/:excursaoId', auth, async (req, res) => {
 app.delete('/api/excursoes/:excursaoId', auth, async (req, res) => {
   try {
     const {excursaoId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa') return res.status(403).json({error: 'Sem permissão.'});
+    const owner = await pool.query('SELECT empresa_id FROM excursoes WHERE id=$1', [excursaoId]);
+    if (owner.rows.length === 0) return res.status(404).json({error: 'Excursão não encontrada.'});
+    if (owner.rows[0].empresa_id !== user.id) return res.status(403).json({error: 'Sem permissão.'});
     await pool.query('DELETE FROM excursoes WHERE id=$1', [excursaoId]);
     res.json({success: true});
   } catch (err: any) {
-    console.error('Erro ao excluir excursão:', err);
+    console.error('Erro ao excluir excursão:', err.message);
     res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });
@@ -1559,6 +1653,62 @@ app.post('/api/recuperar-senha/redefinir', async (req, res) => {
     res.json({success: true});
   } catch (err: any) {
     console.error('Erro ao redefinir senha:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// === EXCLUSÃO DE DADOS (LGPD) ===
+app.post('/api/exclusao-dados', async (req, res) => {
+  try {
+    const {nome, documento, email, motivo} = req.body;
+    if (!nome || !documento || !email) {
+      return res.status(400).json({error: 'Preencha todos os campos obrigatórios.'});
+    }
+
+    // Salva a solicitação no banco
+    await pool.query(
+      `INSERT INTO solicitacoes_exclusao (nome, documento, email, motivo)
+       VALUES ($1, $2, $3, $4)`,
+      [nome, documento, email, motivo || 'Não informado']
+    );
+
+    // Envia e-mail de confirmação para o usuário
+    if (smtpTransporter) {
+      await smtpTransporter.sendMail({
+        from: process.env.SMTP_FROM || '"Na Rota" <noreply@norum.app>',
+        to: email,
+        subject: 'Solicitação de exclusão de dados recebida - Na Rota',
+        html: `
+          <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px">
+            <h2 style="color:#0F2A3F">Solicitação Recebida</h2>
+            <p>Olá ${nome},</p>
+            <p>Recebemos sua solicitação de exclusão de dados da plataforma Na Rota.</p>
+            <div style="background:#F3F4F6;padding:16px;border-radius:8px;margin:16px 0">
+              <p style="margin:0"><strong>Documento:</strong> ${documento}</p>
+              <p style="margin:8px 0 0"><strong>Prazo:</strong> Até 30 dias úteis</p>
+            </div>
+            <p>Você receberá um e-mail de confirmação quando a exclusão for concluída.</p>
+            <p style="color:#6B7280;font-size:13px;margin-top:20px">
+              Se você não solicitou esta exclusão, entre em contato imediatamente: norumtecnologia@gmail.com
+            </p>
+          </div>
+        `,
+      });
+    }
+
+    // Notifica o admin
+    if (smtpTransporter) {
+      await smtpTransporter.sendMail({
+        from: process.env.SMTP_FROM || '"Na Rota" <noreply@norum.app>',
+        to: process.env.SMTP_USER || 'norumtecnologia@gmail.com',
+        subject: `[LGPD] Solicitação de exclusão - ${nome}`,
+        html: `<p><strong>Nome:</strong> ${nome}</p><p><strong>Doc:</strong> ${documento}</p><p><strong>Email:</strong> ${email}</p><p><strong>Motivo:</strong> ${motivo || 'Não informado'}</p>`,
+      });
+    }
+
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro na solicitação de exclusão:', err.message);
     res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });

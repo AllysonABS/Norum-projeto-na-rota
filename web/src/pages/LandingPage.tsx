@@ -183,8 +183,15 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="px-5 md:px-16 py-8 border-t border-white/5 text-center">
-        <p className="text-gray-600 text-sm">© {new Date().getFullYear()} Na Rota Transportes. Todos os direitos reservados.</p>
+      <footer className="px-5 md:px-16 py-8 border-t border-white/5">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+          <p className="text-gray-600 text-sm">© {new Date().getFullYear()} Norum Tecnologia. Todos os direitos reservados.</p>
+          <div className="flex items-center gap-6">
+            <button onClick={() => navigate('/privacidade')} className="text-gray-500 text-sm hover:text-pulso transition">Privacidade</button>
+            <button onClick={() => navigate('/termos')} className="text-gray-500 text-sm hover:text-pulso transition">Termos de Uso</button>
+            <button onClick={() => navigate('/exclusao-de-dados')} className="text-gray-500 text-sm hover:text-pulso transition">Exclusão de Dados</button>
+          </div>
+        </div>
       </footer>
     </div>
   );
