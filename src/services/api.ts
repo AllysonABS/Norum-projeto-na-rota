@@ -601,3 +601,44 @@ export async function excluirExcursao(excursaoId: string): Promise<{success: boo
     return {success: false, error: 'Erro de conexão com o servidor.'};
   }
 }
+
+// === RECUPERAÇÃO DE SENHA ===
+
+export async function solicitarRecuperacao(doc: string): Promise<{success: boolean; email_hint?: string; message?: string; error?: string}> {
+  try {
+    const res = await fetch(`${API_URL}/api/recuperar-senha/solicitar`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({doc}),
+    });
+    return await res.json();
+  } catch {
+    return {success: false, error: 'Erro de conexão com o servidor.'};
+  }
+}
+
+export async function verificarCodigoRecuperacao(doc: string, codigo: string): Promise<{success: boolean; reset_token?: string; error?: string}> {
+  try {
+    const res = await fetch(`${API_URL}/api/recuperar-senha/verificar`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({doc, codigo}),
+    });
+    return await res.json();
+  } catch {
+    return {success: false, error: 'Erro de conexão com o servidor.'};
+  }
+}
+
+export async function redefinirSenha(reset_token: string, nova_senha: string): Promise<{success: boolean; error?: string}> {
+  try {
+    const res = await fetch(`${API_URL}/api/recuperar-senha/redefinir`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({reset_token, nova_senha}),
+    });
+    return await res.json();
+  } catch {
+    return {success: false, error: 'Erro de conexão com o servidor.'};
+  }
+}

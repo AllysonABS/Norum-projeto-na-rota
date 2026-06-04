@@ -103,11 +103,13 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // IMPORTANTE: Gere sua keystore de produção antes de publicar!
+            // Veja: https://reactnative.dev/docs/signed-apk-android
+            // signingConfig signingConfigs.release
+            signingConfig signingConfigs.debug // TODO: trocar para release keystore antes de publicar
             minifyEnabled enableProguardInReleaseBuilds
-            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            shrinkResources enableProguardInReleaseBuilds
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
     }
 }

@@ -13,6 +13,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import crypto from 'crypto';
 import cluster from 'cluster';
 import os from 'os';
+import nodemailer from 'nodemailer';
 
 // === CLUSTER MODE ===
 const NUM_WORKERS = parseInt(process.env.WORKERS || '') || Math.min(os.cpus().length, 4);
@@ -44,7 +45,18 @@ const r2 = new S3Client({
 });
 const R2_BUCKET = process.env.R2_BUCKET || '';
 const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || '';
-const upload = multer({storage: multer.memoryStorage(), limits: {fileSize: 10 * 1024 * 1024}});
+const ALLOWED_MIMETYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {fileSize: 10 * 1024 * 1024},
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_MIMETYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Tipo de arquivo não permitido. Envie apenas imagens (JPEG, PNG, WebP).'));
+    }
+  },
+});
 
 // Inicializa Firebase Admin (via variável de ambiente)
 const __filename = fileURLToPath(import.meta.url);
@@ -134,13 +146,95 @@ function sanitizeObj(obj: Record<string, any>): Record<string, any> {
   return sanitized;
 }
 
-// Middleware que sanitiza req.body automaticamente
 function sanitizeBody(req: express.Request, _res: express.Response, next: express.NextFunction) {
   if (req.body && typeof req.body === 'object') {
     req.body = sanitizeObj(req.body);
   }
   next();
 }
+
+// === VALIDAÇÕES ===
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function isValidCpf(cpf: string): boolean {
+  const digits = cpf.replace(/\D/g, '');
+  if (digits.length !== 11 || /^(\d)\1+$/.test(digits)) return false;
+  let soma = 0;
+  for (let i = 0; i < 9; i++) soma += parseInt(digits[i]) * (10 - i);
+  let resto = (soma * 10) % 11;
+  if (resto === 10) resto = 0;
+  if (resto !== parseInt(digits[9])) return false;
+  soma = 0;
+  for (let i = 0; i < 10; i++) soma += parseInt(digits[i]) * (11 - i);
+  resto = (soma * 10) % 11;
+  if (resto === 10) resto = 0;
+  return resto === parseInt(digits[10]);
+}
+
+function isValidCnpj(cnpj: string): boolean {
+  const digits = cnpj.replace(/\D/g, '');
+  if (digits.length !== 14 || /^(\d)\1+$/.test(digits)) return false;
+  const pesos1 = [5,4,3,2,9,8,7,6,5,4,3,2];
+  const pesos2 = [6,5,4,3,2,9,8,7,6,5,4,3,2];
+  let soma = 0;
+  for (let i = 0; i < 12; i++) soma += parseInt(digits[i]) * pesos1[i];
+  let resto = soma % 11;
+  if (parseInt(digits[12]) !== (resto < 2 ? 0 : 11 - resto)) return false;
+  soma = 0;
+  for (let i = 0; i < 13; i++) soma += parseInt(digits[i]) * pesos2[i];
+  resto = soma % 11;
+  return parseInt(digits[13]) === (resto < 2 ? 0 : 11 - resto);
+}
+
+function isStrongPassword(senha: string): {valid: boolean; message?: string} {
+  if (senha.length < 8) return {valid: false, message: 'A senha deve ter no mínimo 8 caracteres.'};
+  if (!/[A-Z]/.test(senha)) return {valid: false, message: 'A senha deve conter ao menos uma letra maiúscula.'};
+  if (!/[0-9]/.test(senha)) return {valid: false, message: 'A senha deve conter ao menos um número.'};
+  return {valid: true};
+}
+
+// === RATE LIMIT POR DOCUMENTO (anti brute-force login) ===
+const loginAttemptMap = new Map<string, { count: number; blockedUntil: number }>();
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_BLOCK_DURATION = 300000; // 5 minutos
+
+function loginRateLimit(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const doc = req.body?.doc || req.body?.cnpj || req.body?.cpf || '';
+  if (!doc) return next();
+  const now = Date.now();
+  const entry = loginAttemptMap.get(doc);
+  if (entry && now < entry.blockedUntil) {
+    const minutos = Math.ceil((entry.blockedUntil - now) / 60000);
+    return res.status(429).json({error: `Conta temporariamente bloqueada. Tente novamente em ${minutos} min.`});
+  }
+  if (entry && now >= entry.blockedUntil) {
+    loginAttemptMap.delete(doc);
+  }
+  next();
+}
+
+function registrarLoginFalho(doc: string) {
+  const entry = loginAttemptMap.get(doc) || { count: 0, blockedUntil: 0 };
+  entry.count++;
+  if (entry.count >= LOGIN_MAX_ATTEMPTS) {
+    entry.blockedUntil = Date.now() + LOGIN_BLOCK_DURATION;
+  }
+  loginAttemptMap.set(doc, entry);
+}
+
+function limparLoginAttempt(doc: string) {
+  loginAttemptMap.delete(doc);
+}
+
+// Limpa entries velhas a cada 10min
+setInterval(() => {
+  const now = Date.now();
+  for (const [doc, entry] of loginAttemptMap) {
+    if (now >= entry.blockedUntil && entry.blockedUntil > 0) loginAttemptMap.delete(doc);
+  }
+}, 600000);
 
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || 'https://narota.norum.app').split(',');
 
@@ -180,9 +274,18 @@ app.post('/api/cadastro', async (req, res) => {
   try {
     const { nome_empresa, cnpj, nome_responsavel, email, telefone, senha, endereco, cidade, estado, cep } = req.body;
 
-    // Validações
     if (!nome_empresa || !cnpj || !nome_responsavel || !email || !telefone || !senha) {
       return res.status(400).json({ error: 'Campos obrigatórios não preenchidos.' });
+    }
+    if (!isValidCnpj(cnpj)) {
+      return res.status(400).json({ error: 'CNPJ inválido.' });
+    }
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: 'E-mail inválido.' });
+    }
+    const senhaCheck = isStrongPassword(senha);
+    if (!senhaCheck.valid) {
+      return res.status(400).json({ error: senhaCheck.message });
     }
 
     // Verificar duplicidade
@@ -221,7 +324,7 @@ app.post('/api/cadastro', async (req, res) => {
 });
 
 // Login unificado (tenta empresa, despachante e cliente em sequencia rapida)
-app.post('/api/login-unificado', async (req, res) => {
+app.post('/api/login-unificado', loginRateLimit, async (req, res) => {
   try {
     const {doc, senha} = req.body;
     if (!doc || !senha) return res.status(400).json({error: 'Documento e senha obrigat\u00f3rios.'});
@@ -231,6 +334,7 @@ app.post('/api/login-unificado', async (req, res) => {
     if (empRes.rows.length > 0) {
       const empresa = empRes.rows[0];
       if (await bcrypt.compare(senha, empresa.senha_hash)) {
+        limparLoginAttempt(doc);
         const token = gerarToken({ id: empresa.id, tipo: 'empresa' });
         return res.json({
           success: true, tipo: 'empresa', token,
@@ -250,6 +354,7 @@ app.post('/api/login-unificado', async (req, res) => {
     if (despRes.rows.length > 0) {
       const desp = despRes.rows[0];
       if (await bcrypt.compare(senha, desp.senha_hash)) {
+        limparLoginAttempt(doc);
         const empresas = await pool.query(
           `SELECT e.id, e.nome_empresa FROM despachante_empresa de JOIN empresas e ON e.id = de.empresa_id
            WHERE de.despachante_id=$1 AND de.ativo=true`, [desp.id]
@@ -269,6 +374,7 @@ app.post('/api/login-unificado', async (req, res) => {
     if (cliRes.rows.length > 0) {
       const cliente = cliRes.rows[0];
       if (await bcrypt.compare(senha, cliente.senha_hash)) {
+        limparLoginAttempt(doc);
         const token = gerarToken({ id: cliente.id, tipo: 'cliente' });
         return res.json({
           success: true, tipo: 'cliente', token,
@@ -282,9 +388,10 @@ app.post('/api/login-unificado', async (req, res) => {
       }
     }
 
+    registrarLoginFalho(doc);
     res.status(401).json({success: false, error: 'Credenciais inv\u00e1lidas.'});
   } catch (err: any) {
-    console.error('Erro no login unificado:', err);
+    console.error('Erro no login unificado:', err.message);
     res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });
@@ -908,16 +1015,18 @@ app.put('/api/cliente/:id/fcm-token', auth, async (req, res) => {
 app.get('/api/empresa/:empresaId/pedidos', auth, async (req, res) => {
   try {
     const {empresaId} = req.params;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const offset = parseInt(req.query.offset as string) || 0;
     const result = await pool.query(
       `SELECT p.*, 
         (SELECT json_agg(e ORDER BY e.ordem) FROM pedido_etapas e WHERE e.pedido_id = p.id) as etapas,
         (SELECT json_agg(f ORDER BY f.criado_em) FROM pedido_fotos f WHERE f.pedido_id = p.id) as fotos
-       FROM pedidos p WHERE p.empresa_id=$1 ORDER BY p.criado_em DESC`,
-      [empresaId]
+       FROM pedidos p WHERE p.empresa_id=$1 ORDER BY p.criado_em DESC LIMIT $2 OFFSET $3`,
+      [empresaId, limit, offset]
     );
     res.json({success: true, pedidos: result.rows});
   } catch (err: any) {
-    console.error('Erro ao listar pedidos:', err);
+    console.error('Erro ao listar pedidos:', err.message);
     res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });
@@ -926,18 +1035,20 @@ app.get('/api/empresa/:empresaId/pedidos', auth, async (req, res) => {
 app.get('/api/cliente/:clienteId/pedidos', auth, async (req, res) => {
   try {
     const {clienteId} = req.params;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const offset = parseInt(req.query.offset as string) || 0;
     const result = await pool.query(
       `SELECT p.*,
         (SELECT json_agg(e ORDER BY e.ordem) FROM pedido_etapas e WHERE e.pedido_id = p.id) as etapas,
         (SELECT json_agg(f ORDER BY f.criado_em) FROM pedido_fotos f WHERE f.pedido_id = p.id) as fotos,
         emp.nome_empresa
        FROM pedidos p JOIN empresas emp ON emp.id = p.empresa_id
-       WHERE p.cliente_id=$1 ORDER BY p.criado_em DESC`,
-      [clienteId]
+       WHERE p.cliente_id=$1 ORDER BY p.criado_em DESC LIMIT $2 OFFSET $3`,
+      [clienteId, limit, offset]
     );
     res.json({success: true, pedidos: result.rows});
   } catch (err: any) {
-    console.error('Erro ao listar pedidos do cliente:', err);
+    console.error('Erro ao listar pedidos do cliente:', err.message);
     res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });
@@ -946,18 +1057,20 @@ app.get('/api/cliente/:clienteId/pedidos', auth, async (req, res) => {
 app.get('/api/despachante/:despachanteId/pedidos', auth, async (req, res) => {
   try {
     const {despachanteId} = req.params;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const offset = parseInt(req.query.offset as string) || 0;
     const result = await pool.query(
       `SELECT p.*,
         (SELECT json_agg(e ORDER BY e.ordem) FROM pedido_etapas e WHERE e.pedido_id = p.id) as etapas,
         (SELECT json_agg(f ORDER BY f.criado_em) FROM pedido_fotos f WHERE f.pedido_id = p.id) as fotos,
         emp.nome_empresa
        FROM pedidos p JOIN empresas emp ON emp.id = p.empresa_id
-       WHERE p.despachante_id=$1 ORDER BY p.criado_em DESC`,
-      [despachanteId]
+       WHERE p.despachante_id=$1 ORDER BY p.criado_em DESC LIMIT $2 OFFSET $3`,
+      [despachanteId, limit, offset]
     );
     res.json({success: true, pedidos: result.rows});
   } catch (err: any) {
-    console.error('Erro ao listar pedidos do despachante:', err);
+    console.error('Erro ao listar pedidos do despachante:', err.message);
     res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });
@@ -1026,6 +1139,15 @@ app.post('/api/pedidos/:pedidoId/upload-url', auth, async (req, res) => {
   try {
     const {pedidoId} = req.params;
     const {etapa, contentType, ext} = req.body;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+    if (contentType && !allowedTypes.includes(contentType)) {
+      return res.status(400).json({error: 'Tipo de arquivo não permitido.'});
+    }
+    const allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'];
+    if (ext && !allowedExts.includes(ext.toLowerCase())) {
+      return res.status(400).json({error: 'Extensão de arquivo não permitida.'});
+    }
 
     const pedidoRes = await pool.query('SELECT empresa_id, cliente_nome FROM pedidos WHERE id=$1', [pedidoId]);
     if (pedidoRes.rows.length === 0) return res.status(404).json({error: 'Pedido não encontrado.'});
@@ -1201,6 +1323,19 @@ app.post('/api/cadastro-cliente', async (req, res) => {
     if (!nome || !cpf || !email || !telefone || !senha) {
       return res.status(400).json({error: 'Campos obrigatórios não preenchidos.'});
     }
+    if (!isValidCpf(cpf)) {
+      return res.status(400).json({error: 'CPF inválido.'});
+    }
+    if (!isValidEmail(email)) {
+      return res.status(400).json({error: 'E-mail inválido.'});
+    }
+    if (cnpj && !isValidCnpj(cnpj)) {
+      return res.status(400).json({error: 'CNPJ inválido.'});
+    }
+    const senhaCheck = isStrongPassword(senha);
+    if (!senhaCheck.valid) {
+      return res.status(400).json({error: senhaCheck.message});
+    }
     const existe = await pool.query('SELECT id FROM clientes WHERE cpf = $1 OR email = $2', [cpf, email]);
     if (existe.rows.length > 0) {
       return res.status(409).json({error: 'CPF ou e-mail já cadastrado.'});
@@ -1213,7 +1348,7 @@ app.post('/api/cadastro-cliente', async (req, res) => {
     );
     res.status(201).json({success: true, cliente_id: result.rows[0].id});
   } catch (err: any) {
-    console.error('Erro no cadastro cliente:', err);
+    console.error('Erro no cadastro cliente:', err.message);
     res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });
@@ -1246,6 +1381,184 @@ app.post('/api/login-cliente', async (req, res) => {
     });
   } catch (err: any) {
     console.error('Erro no login cliente:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// === RECUPERAÇÃO DE SENHA ===
+
+const smtpTransporter = process.env.SMTP_HOST ? nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT || '587'),
+  secure: process.env.SMTP_SECURE === 'true',
+  auth: {
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+  },
+}) : null;
+
+const RESET_CODE_EXPIRY_MIN = 10;
+
+const resetRateMap = new Map<string, { count: number; resetAt: number }>();
+function resetRateLimit(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const entry = resetRateMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    resetRateMap.set(ip, { count: 1, resetAt: now + 60000 });
+    return next();
+  }
+  entry.count++;
+  if (entry.count > 3) {
+    return res.status(429).json({ error: 'Muitas tentativas. Aguarde 1 minuto.' });
+  }
+  next();
+}
+
+app.post('/api/recuperar-senha/solicitar', resetRateLimit, async (req, res) => {
+  try {
+    const {doc} = req.body;
+    if (!doc) return res.status(400).json({error: 'Informe o CPF ou CNPJ.'});
+
+    let email: string | null = null;
+    let tipo: string | null = null;
+    let userId: string | null = null;
+
+    const cli = await pool.query('SELECT id, email FROM clientes WHERE cpf=$1 AND ativo=true', [doc]);
+    if (cli.rows.length > 0) { email = cli.rows[0].email; tipo = 'cliente'; userId = cli.rows[0].id; }
+
+    if (!email) {
+      const emp = await pool.query('SELECT id, email FROM empresas WHERE cnpj=$1 AND ativa=true', [doc]);
+      if (emp.rows.length > 0) { email = emp.rows[0].email; tipo = 'empresa'; userId = emp.rows[0].id; }
+    }
+
+    if (!userId) {
+      const desp = await pool.query('SELECT id FROM despachantes WHERE cpf=$1', [doc]);
+      if (desp.rows.length > 0) { tipo = 'despachante'; userId = desp.rows[0].id; }
+    }
+
+    if (!userId || !tipo) {
+      return res.json({success: true, message: 'Se o documento estiver cadastrado, você receberá um e-mail com o código.'});
+    }
+
+    const codigo = crypto.randomInt(100000, 999999).toString();
+    const expiraEm = new Date(Date.now() + RESET_CODE_EXPIRY_MIN * 60000);
+
+    await pool.query(
+      `INSERT INTO recuperacao_senha (user_id, tipo, codigo, expira_em, tentativas)
+       VALUES ($1, $2, $3, $4, 0)
+       ON CONFLICT (user_id, tipo) DO UPDATE SET codigo=$3, expira_em=$4, tentativas=0, usado=false`,
+      [userId, tipo, codigo, expiraEm]
+    );
+
+    if (email && smtpTransporter) {
+      const emailMasked = email.replace(/(.{2})(.*)(@.*)/, '$1***$3');
+      await smtpTransporter.sendMail({
+        from: process.env.SMTP_FROM || '"Na Rota" <noreply@norum.app>',
+        to: email,
+        subject: 'Código de recuperação de senha - Na Rota',
+        html: `
+          <div style="font-family:sans-serif;max-width:400px;margin:0 auto;padding:20px">
+            <h2 style="color:#0F2A3F">Recuperação de Senha</h2>
+            <p>Seu código de verificação é:</p>
+            <div style="background:#F3F4F6;padding:16px;border-radius:8px;text-align:center;font-size:32px;font-weight:bold;letter-spacing:8px;color:#0F2A3F">
+              ${codigo}
+            </div>
+            <p style="color:#6B7280;font-size:14px;margin-top:16px">Este código expira em ${RESET_CODE_EXPIRY_MIN} minutos.</p>
+            <p style="color:#6B7280;font-size:14px">Se você não solicitou, ignore este e-mail.</p>
+          </div>
+        `,
+      });
+      console.log(`[RESET] Código enviado para ${emailMasked}`);
+    } else {
+      console.log(`[RESET] SMTP não configurado. Código: ${codigo} (user: ${userId})`);
+    }
+
+    const emailHint = email ? email.replace(/(.{2})(.*)(@.*)/, '$1***$3') : undefined;
+    res.json({success: true, message: 'Se o documento estiver cadastrado, você receberá um e-mail com o código.', email_hint: emailHint});
+  } catch (err: any) {
+    console.error('Erro ao solicitar recuperação:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+app.post('/api/recuperar-senha/verificar', resetRateLimit, async (req, res) => {
+  try {
+    const {doc, codigo} = req.body;
+    if (!doc || !codigo) return res.status(400).json({error: 'Informe o documento e o código.'});
+
+    let tipo: string | null = null;
+    let userId: string | null = null;
+
+    const cli = await pool.query('SELECT id FROM clientes WHERE cpf=$1', [doc]);
+    if (cli.rows.length > 0) { tipo = 'cliente'; userId = cli.rows[0].id; }
+    if (!userId) {
+      const emp = await pool.query('SELECT id FROM empresas WHERE cnpj=$1', [doc]);
+      if (emp.rows.length > 0) { tipo = 'empresa'; userId = emp.rows[0].id; }
+    }
+    if (!userId) {
+      const desp = await pool.query('SELECT id FROM despachantes WHERE cpf=$1', [doc]);
+      if (desp.rows.length > 0) { tipo = 'despachante'; userId = desp.rows[0].id; }
+    }
+
+    if (!userId || !tipo) return res.status(400).json({error: 'Código inválido.'});
+
+    const result = await pool.query(
+      'SELECT * FROM recuperacao_senha WHERE user_id=$1 AND tipo=$2 AND usado=false',
+      [userId, tipo]
+    );
+    if (result.rows.length === 0) return res.status(400).json({error: 'Código inválido ou expirado.'});
+
+    const registro = result.rows[0];
+
+    if (registro.tentativas >= 5) {
+      return res.status(429).json({error: 'Muitas tentativas incorretas. Solicite um novo código.'});
+    }
+    if (new Date() > new Date(registro.expira_em)) {
+      return res.status(400).json({error: 'Código expirado. Solicite um novo.'});
+    }
+    if (registro.codigo !== codigo) {
+      await pool.query('UPDATE recuperacao_senha SET tentativas=tentativas+1 WHERE id=$1', [registro.id]);
+      return res.status(400).json({error: 'Código incorreto.'});
+    }
+
+    const resetToken = jwt.sign({userId, tipo, purpose: 'reset'}, JWT_SECRET!, {expiresIn: '5m'});
+    res.json({success: true, reset_token: resetToken});
+  } catch (err: any) {
+    console.error('Erro ao verificar código:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+app.post('/api/recuperar-senha/redefinir', async (req, res) => {
+  try {
+    const {reset_token, nova_senha} = req.body;
+    if (!reset_token || !nova_senha) return res.status(400).json({error: 'Token e nova senha obrigatórios.'});
+    if (nova_senha.length < 6) return res.status(400).json({error: 'A senha deve ter no mínimo 6 caracteres.'});
+
+    let decoded: any;
+    try {
+      decoded = jwt.verify(reset_token, JWT_SECRET!);
+    } catch {
+      return res.status(400).json({error: 'Token inválido ou expirado. Solicite um novo código.'});
+    }
+    if (decoded.purpose !== 'reset') return res.status(400).json({error: 'Token inválido.'});
+
+    const {userId, tipo} = decoded;
+    const nova_hash = await bcrypt.hash(nova_senha, 10);
+
+    if (tipo === 'cliente') {
+      await pool.query('UPDATE clientes SET senha_hash=$1 WHERE id=$2', [nova_hash, userId]);
+    } else if (tipo === 'empresa') {
+      await pool.query('UPDATE empresas SET senha_hash=$1 WHERE id=$2', [nova_hash, userId]);
+    } else if (tipo === 'despachante') {
+      await pool.query('UPDATE despachantes SET senha_hash=$1 WHERE id=$2', [nova_hash, userId]);
+    }
+
+    await pool.query('UPDATE recuperacao_senha SET usado=true WHERE user_id=$1 AND tipo=$2', [userId, tipo]);
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao redefinir senha:', err);
     res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });

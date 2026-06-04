@@ -4,6 +4,8 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
+import {useAlert} from '../../components/CustomAlert';
+import {solicitarRecuperacao, verificarCodigoRecuperacao, redefinirSenha} from '../../services/api';
 
 function maskCpfCnpj(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 14);
@@ -25,32 +27,69 @@ type Props = {
 };
 
 export default function EsqueceuSenhaScreen({navigation}: Props) {
+  const {show} = useAlert();
   const [etapa, setEtapa] = useState<'email' | 'codigo' | 'novaSenha'>('email');
   const [cpfCnpj, setCpfCnpj] = useState('');
+  const [emailHint, setEmailHint] = useState('');
   const [codigo, setCodigo] = useState('');
+  const [resetToken, setResetToken] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const enviarCodigo = () => {
-    if (!cpfCnpj) return;
+  const doc = cpfCnpj.replace(/\D/g, '');
+
+  const enviarCodigo = async () => {
+    if (!doc) {
+      show({title: 'Atenção', message: 'Informe seu CPF ou CNPJ.', type: 'warning'});
+      return;
+    }
     setLoading(true);
-    setTimeout(() => { setLoading(false); setEtapa('codigo'); }, 1000);
+    const res = await solicitarRecuperacao(doc);
+    setLoading(false);
+    if (res.success) {
+      if (res.email_hint) setEmailHint(res.email_hint);
+      setEtapa('codigo');
+    } else {
+      show({title: 'Erro', message: res.error || 'Não foi possível enviar o código.', type: 'error'});
+    }
   };
 
-  const verificarCodigo = () => {
-    if (!codigo || codigo.length < 4) return;
+  const verificarCodigo = async () => {
+    if (!codigo || codigo.length < 6) {
+      show({title: 'Atenção', message: 'Digite o código de 6 dígitos.', type: 'warning'});
+      return;
+    }
     setLoading(true);
-    setTimeout(() => { setLoading(false); setEtapa('novaSenha'); }, 800);
+    const res = await verificarCodigoRecuperacao(doc, codigo);
+    setLoading(false);
+    if (res.success && res.reset_token) {
+      setResetToken(res.reset_token);
+      setEtapa('novaSenha');
+    } else {
+      show({title: 'Erro', message: res.error || 'Código inválido.', type: 'error'});
+    }
   };
 
-  const redefinirSenha = () => {
-    if (!novaSenha || novaSenha !== confirmarSenha) return;
+  const handleRedefinir = async () => {
+    if (!novaSenha || novaSenha.length < 6) {
+      show({title: 'Atenção', message: 'A senha deve ter no mínimo 6 caracteres.', type: 'warning'});
+      return;
+    }
+    if (novaSenha !== confirmarSenha) {
+      show({title: 'Atenção', message: 'As senhas não coincidem.', type: 'warning'});
+      return;
+    }
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      navigation.replace('Login');
-    }, 800);
+    const res = await redefinirSenha(resetToken, novaSenha);
+    setLoading(false);
+    if (res.success) {
+      show({title: 'Sucesso', message: 'Senha redefinida! Faça login com a nova senha.', type: 'success', buttons: [
+        {text: 'OK', onPress: () => navigation.replace('Login')},
+      ]});
+    } else {
+      show({title: 'Erro', message: res.error || 'Não foi possível redefinir a senha.', type: 'error'});
+    }
   };
 
   return (
@@ -70,8 +109,8 @@ export default function EsqueceuSenhaScreen({navigation}: Props) {
             {etapa === 'novaSenha' && 'Nova senha'}
           </Text>
           <Text style={s.subtitle}>
-            {etapa === 'email' && 'Informe seu CPF/CNPJ para receber o código de recuperação.'}
-            {etapa === 'codigo' && 'Digite o código de 6 dígitos enviado para seu telefone/e-mail.'}
+            {etapa === 'email' && 'Informe seu CPF/CNPJ para receber o código de recuperação por e-mail.'}
+            {etapa === 'codigo' && `Digite o código de 6 dígitos enviado para ${emailHint || 'seu e-mail'}.`}
             {etapa === 'novaSenha' && 'Crie uma nova senha para sua conta.'}
           </Text>
         </View>
@@ -94,7 +133,7 @@ export default function EsqueceuSenhaScreen({navigation}: Props) {
               <TouchableOpacity style={[s.btn, loading && s.btnDisabled]} onPress={verificarCodigo} disabled={loading} activeOpacity={0.85}>
                 {loading ? <ActivityIndicator color={Colors.matriz} /> : <Text style={s.btnText}>Verificar</Text>}
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setEtapa('email')} style={s.reenviar}>
+              <TouchableOpacity onPress={() => { setCodigo(''); enviarCodigo(); }} style={s.reenviar}>
                 <Text style={s.reenviarText}>Reenviar código</Text>
               </TouchableOpacity>
             </>
@@ -109,7 +148,7 @@ export default function EsqueceuSenhaScreen({navigation}: Props) {
               {novaSenha && confirmarSenha && novaSenha !== confirmarSenha && (
                 <Text style={s.erro}>As senhas não coincidem</Text>
               )}
-              <TouchableOpacity style={[s.btn, loading && s.btnDisabled]} onPress={redefinirSenha} disabled={loading} activeOpacity={0.85}>
+              <TouchableOpacity style={[s.btn, loading && s.btnDisabled]} onPress={handleRedefinir} disabled={loading} activeOpacity={0.85}>
                 {loading ? <ActivityIndicator color={Colors.matriz} /> : <Text style={s.btnText}>Redefinir senha</Text>}
               </TouchableOpacity>
             </>

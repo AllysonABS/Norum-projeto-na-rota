@@ -53,8 +53,14 @@ export default function CadastroPage() {
     if (form.senha !== form.confirmar_senha) {
       setErro('As senhas não coincidem.'); return;
     }
-    if (form.senha.length < 6) {
-      setErro('A senha deve ter pelo menos 6 caracteres.'); return;
+    if (form.senha.length < 8) {
+      setErro('A senha deve ter pelo menos 8 caracteres.'); return;
+    }
+    if (!/[A-Z]/.test(form.senha)) {
+      setErro('A senha deve conter ao menos uma letra maiúscula.'); return;
+    }
+    if (!/[0-9]/.test(form.senha)) {
+      setErro('A senha deve conter ao menos um número.'); return;
     }
 
     setLoading(true);
@@ -224,7 +230,7 @@ export default function CadastroPage() {
                 value={form.senha}
                 onChange={e => update('senha', e.target.value)}
                 maxLength={50}
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Mínimo 8 caracteres, 1 maiúscula, 1 número"
                 className={inputClass}
               />
             </div>

@@ -8,11 +8,15 @@ RUN npm run build
 
 FROM node:20-alpine
 
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev
-COPY --from=builder /app/dist ./dist
-COPY server ./server
+RUN npm ci --omit=dev && chown -R appuser:appgroup /app
+COPY --from=builder --chown=appuser:appgroup /app/dist ./dist
+COPY --chown=appuser:appgroup server ./server
+
+USER appuser
 
 ENV NODE_ENV=production
 ENV PORT=3001

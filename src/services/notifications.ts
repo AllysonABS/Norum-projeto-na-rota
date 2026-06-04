@@ -1,4 +1,5 @@
 import {Platform, PermissionsAndroid} from 'react-native';
+import {getAuthToken} from './api';
 
 const API_URL = 'https://narota.norum.app';
 
@@ -27,9 +28,13 @@ export async function getFCMToken(): Promise<string | null> {
 
 export async function registrarTokenEmpresa(empresaId: string, token: string): Promise<void> {
   try {
+    const authToken = getAuthToken();
     await fetch(`${API_URL}/api/empresa/${empresaId}/fcm-token`, {
       method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken ? {'Authorization': `Bearer ${authToken}`} : {}),
+      },
       body: JSON.stringify({token}),
     });
   } catch {}
@@ -37,9 +42,13 @@ export async function registrarTokenEmpresa(empresaId: string, token: string): P
 
 export async function registrarTokenCliente(clienteId: string, token: string): Promise<void> {
   try {
+    const authToken = getAuthToken();
     await fetch(`${API_URL}/api/cliente/${clienteId}/fcm-token`, {
       method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken ? {'Authorization': `Bearer ${authToken}`} : {}),
+      },
       body: JSON.stringify({token}),
     });
   } catch {}

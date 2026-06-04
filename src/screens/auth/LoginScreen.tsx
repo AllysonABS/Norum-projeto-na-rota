@@ -18,8 +18,8 @@ import {loginUnificado} from '../../services/api';
 import {useAuth} from '../../context/AuthContext';
 import {useAlert} from '../../components/CustomAlert';
 import Icon from '../../components/Icon';
-import {saveCredentials, getCredentials, clearCredentials} from '../../utils/secureStorage';
 import {hapticSuccess, hapticError} from '../../utils/haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Login'>;
@@ -85,14 +85,13 @@ export default function LoginScreen({navigation}: Props) {
   const [showPassword, setShowPassword] = useState(false);
   const [lembrar, setLembrar] = useState(false);
   const [loading, setLoading] = useState(false);
-  const {setEmpresa, setCliente, setDespachante} = useAuth();
+  const {setEmpresa, setCliente, setDespachante, saveToken} = useAuth();
   const {show} = useAlert();
 
   useEffect(() => {
-    getCredentials().then(creds => {
-      if (creds) {
-        setCpfCnpj(creds.username);
-        setPassword(creds.password);
+    AsyncStorage.getItem('lembrar_doc').then(doc => {
+      if (doc) {
+        setCpfCnpj(doc);
         setLembrar(true);
       }
     });
@@ -110,9 +109,13 @@ export default function LoginScreen({navigation}: Props) {
       const res = await loginUnificado(doc, password);
 
       if (lembrar) {
-        await saveCredentials(cpfCnpj, password);
+        await AsyncStorage.setItem('lembrar_doc', cpfCnpj);
       } else {
-        await clearCredentials();
+        await AsyncStorage.removeItem('lembrar_doc');
+      }
+
+      if (res.success && res.token) {
+        await saveToken(res.token);
       }
 
       if (res.success && res.tipo === 'empresa' && res.empresa) {

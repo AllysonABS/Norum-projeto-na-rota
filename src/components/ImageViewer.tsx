@@ -16,7 +16,14 @@ export default function ImageViewer({visible, url, onClose}: Props) {
   const [saving, setSaving] = useState(false);
   const {show} = useAlert();
 
+  // Valida que a URL é do nosso domínio R2
+  const isValidUrl = url && (url.startsWith('https://') && (url.includes('.r2.dev') || url.includes('norum')));
+
   const download = async () => {
+    if (!isValidUrl) {
+      show({title: 'Erro', message: 'URL de imagem inv\u00e1lida.', type: 'error'});
+      return;
+    }
     try {
       setSaving(true);
 
