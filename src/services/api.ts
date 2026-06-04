@@ -2,6 +2,23 @@
 // Produção: https://narota.norum.app
 const API_URL = 'https://narota.norum.app';
 
+// Token de autenticação (gerenciado pelo AuthContext)
+let authToken: string | null = null;
+
+export function setAuthToken(token: string | null) {
+  authToken = token;
+}
+
+export function getAuthToken(): string | null {
+  return authToken;
+}
+
+function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+  return headers;
+}
+
 export type EmpresaData = {
   id: string;
   nome_empresa: string;
@@ -24,7 +41,7 @@ type LoginResponse = {
 };
 
 export async function loginUnificado(doc: string, senha: string): Promise<{
-  success: boolean; tipo?: 'empresa' | 'despachante' | 'cliente';
+  success: boolean; tipo?: 'empresa' | 'despachante' | 'cliente'; token?: string;
   empresa?: EmpresaData; despachante?: DespachanteData; cliente?: ClienteData; error?: string;
 }> {
   try {
@@ -33,7 +50,9 @@ export async function loginUnificado(doc: string, senha: string): Promise<{
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({doc, senha}),
     });
-    return await res.json();
+    const data = await res.json();
+    if (data.success && data.token) setAuthToken(data.token);
+    return data;
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
   }
@@ -46,7 +65,9 @@ export async function loginEmpresa(cnpj: string, senha: string): Promise<LoginRe
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({cnpj, senha}),
     });
-    return await res.json();
+    const data = await res.json();
+    if (data.success && data.token) setAuthToken(data.token);
+    return data;
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
   }
@@ -54,7 +75,7 @@ export async function loginEmpresa(cnpj: string, senha: string): Promise<LoginRe
 
 export async function buscarEmpresa(id: string): Promise<{success: boolean; empresa?: EmpresaData; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/empresa/${id}`);
+    const res = await fetch(`${API_URL}/api/empresa/${id}`, { headers: authHeaders() });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
@@ -65,7 +86,7 @@ export async function atualizarEmpresa(id: string, dados: Partial<EmpresaData>):
   try {
     const res = await fetch(`${API_URL}/api/empresa/${id}`, {
       method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify(dados),
     });
     return await res.json();
@@ -112,7 +133,7 @@ export async function atualizarCliente(id: string, dados: Partial<ClienteData>):
   try {
     const res = await fetch(`${API_URL}/api/cliente/${id}`, {
       method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify(dados),
     });
     return await res.json();
@@ -125,7 +146,7 @@ export async function alterarSenhaCliente(id: string, senha_atual: string, nova_
   try {
     const res = await fetch(`${API_URL}/api/cliente/${id}/alterar-senha`, {
       method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify({senha_atual, nova_senha}),
     });
     return await res.json();
@@ -134,14 +155,16 @@ export async function alterarSenhaCliente(id: string, senha_atual: string, nova_
   }
 }
 
-export async function loginCliente(cpf: string, senha: string): Promise<{success: boolean; cliente?: ClienteData; error?: string}> {
+export async function loginCliente(cpf: string, senha: string): Promise<{success: boolean; cliente?: ClienteData; token?: string; error?: string}> {
   try {
     const res = await fetch(`${API_URL}/api/login-cliente`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({cpf, senha}),
     });
-    return await res.json();
+    const data = await res.json();
+    if (data.success && data.token) setAuthToken(data.token);
+    return data;
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
   }
@@ -167,7 +190,7 @@ export async function listarTodasLojas(): Promise<{success: boolean; lojas?: Loj
 
 export async function listarMinhasLojas(clienteId: string): Promise<{success: boolean; lojas?: LojaData[]; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/cliente/${clienteId}/lojas`);
+    const res = await fetch(`${API_URL}/api/cliente/${clienteId}/lojas`, { headers: authHeaders() });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
@@ -176,7 +199,10 @@ export async function listarMinhasLojas(clienteId: string): Promise<{success: bo
 
 export async function vincularLoja(clienteId: string, empresaId: string): Promise<{success: boolean; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/cliente/${clienteId}/vincular/${empresaId}`, {method: 'POST'});
+    const res = await fetch(`${API_URL}/api/cliente/${clienteId}/vincular/${empresaId}`, {
+      method: 'POST',
+      headers: authHeaders(),
+    });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
@@ -185,7 +211,10 @@ export async function vincularLoja(clienteId: string, empresaId: string): Promis
 
 export async function desvincularLoja(clienteId: string, empresaId: string): Promise<{success: boolean; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/cliente/${clienteId}/desvincular/${empresaId}`, {method: 'DELETE'});
+    const res = await fetch(`${API_URL}/api/cliente/${clienteId}/desvincular/${empresaId}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
@@ -194,7 +223,7 @@ export async function desvincularLoja(clienteId: string, empresaId: string): Pro
 
 export async function listarClientesEmpresa(empresaId: string): Promise<{success: boolean; clientes?: any[]; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/clientes`);
+    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/clientes`, { headers: authHeaders() });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
@@ -205,7 +234,7 @@ export async function atualizarVinculoCliente(vinculoId: string, dados: any): Pr
   try {
     const res = await fetch(`${API_URL}/api/empresa/vinculo/${vinculoId}`, {
       method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify(dados),
     });
     return await res.json();
@@ -216,7 +245,10 @@ export async function atualizarVinculoCliente(vinculoId: string, dados: any): Pr
 
 export async function bloquearVinculoCliente(vinculoId: string): Promise<{success: boolean; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/empresa/vinculo/${vinculoId}/bloquear`, {method: 'PUT'});
+    const res = await fetch(`${API_URL}/api/empresa/vinculo/${vinculoId}/bloquear`, {
+      method: 'PUT',
+      headers: authHeaders(),
+    });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
@@ -225,7 +257,10 @@ export async function bloquearVinculoCliente(vinculoId: string): Promise<{succes
 
 export async function excluirVinculoCliente(vinculoId: string): Promise<{success: boolean; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/empresa/vinculo/${vinculoId}`, {method: 'DELETE'});
+    const res = await fetch(`${API_URL}/api/empresa/vinculo/${vinculoId}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
@@ -239,7 +274,7 @@ export async function cadastrarClienteManual(empresaId: string, dados: {
   try {
     const res = await fetch(`${API_URL}/api/empresa/${empresaId}/cadastrar-cliente`, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify(dados),
     });
     return await res.json();
@@ -282,7 +317,7 @@ export async function criarPedido(empresaId: string, dados: {
   try {
     const res = await fetch(`${API_URL}/api/empresa/${empresaId}/pedidos`, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify(dados),
     });
     return await res.json();
@@ -293,7 +328,7 @@ export async function criarPedido(empresaId: string, dados: {
 
 export async function listarPedidosEmpresa(empresaId: string): Promise<{success: boolean; pedidos?: PedidoData[]; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/pedidos`);
+    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/pedidos`, { headers: authHeaders() });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
@@ -302,7 +337,7 @@ export async function listarPedidosEmpresa(empresaId: string): Promise<{success:
 
 export async function listarPedidosCliente(clienteId: string): Promise<{success: boolean; pedidos?: PedidoData[]; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/cliente/${clienteId}/pedidos`);
+    const res = await fetch(`${API_URL}/api/cliente/${clienteId}/pedidos`, { headers: authHeaders() });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
@@ -311,7 +346,7 @@ export async function listarPedidosCliente(clienteId: string): Promise<{success:
 
 export async function listarPedidosDespachante(despachanteId: string): Promise<{success: boolean; pedidos?: PedidoData[]; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/despachante/${despachanteId}/pedidos`);
+    const res = await fetch(`${API_URL}/api/despachante/${despachanteId}/pedidos`, { headers: authHeaders() });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
@@ -322,7 +357,7 @@ export async function atualizarStatusPedido(pedidoId: string, status: string): P
   try {
     const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/status`, {
       method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify({status}),
     });
     return await res.json();
@@ -335,7 +370,7 @@ export async function concluirEtapaPedido(pedidoId: string, tipo: string): Promi
   try {
     const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/concluir-etapas`, {
       method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify({tipo}),
     });
     return await res.json();
@@ -346,16 +381,14 @@ export async function concluirEtapaPedido(pedidoId: string, tipo: string): Promi
 
 export async function uploadFotoPedido(pedidoId: string, uri: string, etapa: string): Promise<{success: boolean; url?: string; error?: string}> {
   try {
-    // 1. Pede presigned URL ao server (leve, não envia foto)
     const presignRes = await fetch(`${API_URL}/api/pedidos/${pedidoId}/upload-url`, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify({etapa, contentType: 'image/jpeg', ext: 'jpg'}),
     });
     const presignData = await presignRes.json();
     if (!presignData.success) return {success: false, error: presignData.error || 'Erro ao gerar URL.'};
 
-    // 2. Faz upload direto pro R2 via presigned URL
     const fileRes = await fetch(uri);
     const blob = await fileRes.blob();
     const uploadRes = await fetch(presignData.uploadUrl, {
@@ -375,7 +408,7 @@ export async function salvarObservacaoPedido(pedidoId: string, observacao: strin
   try {
     const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/observacao`, {
       method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify({observacao}),
     });
     return await res.json();
@@ -398,7 +431,7 @@ export type NotificacaoData = {
 
 export async function listarNotificacoes(empresaId: string): Promise<{success: boolean; notificacoes?: NotificacaoData[]; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/notificacoes`);
+    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/notificacoes`, { headers: authHeaders() });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
@@ -407,7 +440,7 @@ export async function listarNotificacoes(empresaId: string): Promise<{success: b
 
 export async function contarNotificacoesNaoLidas(empresaId: string): Promise<{success: boolean; total?: number; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/notificacoes/nao-lidas`);
+    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/notificacoes/nao-lidas`, { headers: authHeaders() });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
@@ -416,7 +449,10 @@ export async function contarNotificacoesNaoLidas(empresaId: string): Promise<{su
 
 export async function marcarNotificacoesLidas(empresaId: string): Promise<{success: boolean; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/notificacoes/marcar-lidas`, {method: 'PUT'});
+    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/notificacoes/marcar-lidas`, {
+      method: 'PUT',
+      headers: authHeaders(),
+    });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
@@ -436,7 +472,7 @@ export type DespachanteData = {
 
 export async function listarDespachantes(empresaId: string): Promise<{success: boolean; despachantes?: DespachanteData[]; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/despachantes`);
+    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/despachantes`, { headers: authHeaders() });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
@@ -447,7 +483,7 @@ export async function cadastrarDespachante(empresaId: string, dados: {nome: stri
   try {
     const res = await fetch(`${API_URL}/api/empresa/${empresaId}/despachantes`, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify(dados),
     });
     return await res.json();
@@ -460,7 +496,7 @@ export async function atualizarDespachante(despachanteId: string, dados: {nome: 
   try {
     const res = await fetch(`${API_URL}/api/despachantes/${despachanteId}`, {
       method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify(dados),
     });
     return await res.json();
@@ -471,7 +507,10 @@ export async function atualizarDespachante(despachanteId: string, dados: {nome: 
 
 export async function toggleDespachante(despachanteId: string, empresaId: string): Promise<{success: boolean; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/despachantes/${despachanteId}/toggle`, {method: 'PUT'});
+    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/despachantes/${despachanteId}/toggle`, {
+      method: 'PUT',
+      headers: authHeaders(),
+    });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
@@ -480,21 +519,26 @@ export async function toggleDespachante(despachanteId: string, empresaId: string
 
 export async function excluirDespachante(despachanteId: string, empresaId: string): Promise<{success: boolean; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/despachantes/${despachanteId}`, {method: 'DELETE'});
+    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/despachantes/${despachanteId}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
   }
 }
 
-export async function loginDespachante(cpf: string, senha: string): Promise<{success: boolean; despachante?: DespachanteData; error?: string}> {
+export async function loginDespachante(cpf: string, senha: string): Promise<{success: boolean; despachante?: DespachanteData; token?: string; error?: string}> {
   try {
     const res = await fetch(`${API_URL}/api/login-despachante`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({cpf, senha}),
     });
-    return await res.json();
+    const data = await res.json();
+    if (data.success && data.token) setAuthToken(data.token);
+    return data;
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
   }
@@ -513,7 +557,7 @@ export type ExcursaoData = {
 
 export async function listarExcursoes(empresaId: string): Promise<{success: boolean; excursoes?: ExcursaoData[]; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/excursoes`);
+    const res = await fetch(`${API_URL}/api/empresa/${empresaId}/excursoes`, { headers: authHeaders() });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
@@ -524,7 +568,7 @@ export async function cadastrarExcursao(empresaId: string, dados: Omit<ExcursaoD
   try {
     const res = await fetch(`${API_URL}/api/empresa/${empresaId}/excursoes`, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify(dados),
     });
     return await res.json();
@@ -537,7 +581,7 @@ export async function atualizarExcursao(excursaoId: string, dados: Omit<Excursao
   try {
     const res = await fetch(`${API_URL}/api/excursoes/${excursaoId}`, {
       method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify(dados),
     });
     return await res.json();
@@ -548,7 +592,10 @@ export async function atualizarExcursao(excursaoId: string, dados: Omit<Excursao
 
 export async function excluirExcursao(excursaoId: string): Promise<{success: boolean; error?: string}> {
   try {
-    const res = await fetch(`${API_URL}/api/excursoes/${excursaoId}`, {method: 'DELETE'});
+    const res = await fetch(`${API_URL}/api/excursoes/${excursaoId}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
     return await res.json();
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};

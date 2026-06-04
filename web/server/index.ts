@@ -1,11 +1,12 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
 import admin from 'firebase-admin';
-import { readFileSync, existsSync } from 'fs';
+import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -30,35 +31,32 @@ if (cluster.isPrimary && process.env.NODE_ENV === 'production') {
 function startServer() {
 
 // R2 (Cloudflare) config
+if (!process.env.R2_ENDPOINT || !process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY) {
+  console.warn('R2 env vars não configuradas. Upload de fotos desabilitado.');
+}
 const r2 = new S3Client({
   region: 'auto',
-  endpoint: process.env.R2_ENDPOINT || 'https://0202dec50e9ba69b8d2697d64b2522ae.r2.cloudflarestorage.com',
+  endpoint: process.env.R2_ENDPOINT || '',
   credentials: {
     accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
   },
 });
-const R2_BUCKET = process.env.R2_BUCKET || 'norumnarota';
-const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://pub-035640b4d7b74fdd83d9ff2d64414b2e.r2.dev';
+const R2_BUCKET = process.env.R2_BUCKET || '';
+const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || '';
 const upload = multer({storage: multer.memoryStorage(), limits: {fileSize: 10 * 1024 * 1024}});
 
-// Inicializa Firebase Admin
+// Inicializa Firebase Admin (via variável de ambiente)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const firebaseKeyPath = path.join(__dirname, 'firebase-service-account.json');
 
-if (existsSync(firebaseKeyPath)) {
-  const serviceAccount = JSON.parse(readFileSync(firebaseKeyPath, 'utf8'));
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-} else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
 } else {
-  console.warn('Firebase service account not found, push notifications disabled.');
+  console.warn('FIREBASE_SERVICE_ACCOUNT não definida, push notifications desabilitadas.');
 }
 
 // === RATE LIMITING (in-memory, simples) ===
@@ -88,9 +86,81 @@ setInterval(() => {
   }
 }, 300000);
 
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET não definido. Defina no .env');
+  process.exit(1);
+}
+const JWT_EXPIRES_IN = '7d';
+
+type TokenPayload = { id: string; tipo: 'empresa' | 'despachante' | 'cliente' };
+
+function gerarToken(payload: TokenPayload): string {
+  return jwt.sign(payload, JWT_SECRET!, { expiresIn: JWT_EXPIRES_IN });
+}
+
+// Middleware de autenticação
+function auth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Token não fornecido.' });
+  }
+  try {
+    const decoded = jwt.verify(header.slice(7), JWT_SECRET!) as TokenPayload;
+    (req as any).user = decoded;
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Token inválido ou expirado.' });
+  }
+}
+
+// === SANITIZAÇÃO DE INPUT ===
+function sanitize(value: any): any {
+  if (typeof value !== 'string') return value;
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .trim();
+}
+
+function sanitizeObj(obj: Record<string, any>): Record<string, any> {
+  const sanitized: Record<string, any> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    sanitized[key] = sanitize(val);
+  }
+  return sanitized;
+}
+
+// Middleware que sanitiza req.body automaticamente
+function sanitizeBody(req: express.Request, _res: express.Response, next: express.NextFunction) {
+  if (req.body && typeof req.body === 'object') {
+    req.body = sanitizeObj(req.body);
+  }
+  next();
+}
+
+const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || 'https://narota.norum.app').split(',');
+
 const app = express();
-app.use(cors());
+app.use(helmet());
+app.use(cors({
+  origin: (origin, callback) => {
+    // Permite requests sem origin (mobile apps, curl em dev)
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Bloqueado por CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+}));
 app.use(express.json({ limit: '1mb' }));
+app.use(sanitizeBody);
 app.use(rateLimiter);
 
 const pool = new Pool({
@@ -161,8 +231,9 @@ app.post('/api/login-unificado', async (req, res) => {
     if (empRes.rows.length > 0) {
       const empresa = empRes.rows[0];
       if (await bcrypt.compare(senha, empresa.senha_hash)) {
+        const token = gerarToken({ id: empresa.id, tipo: 'empresa' });
         return res.json({
-          success: true, tipo: 'empresa',
+          success: true, tipo: 'empresa', token,
           empresa: {
             id: empresa.id, nome_empresa: empresa.nome_empresa, cnpj: empresa.cnpj,
             nome_responsavel: empresa.nome_responsavel, email: empresa.email,
@@ -184,8 +255,9 @@ app.post('/api/login-unificado', async (req, res) => {
            WHERE de.despachante_id=$1 AND de.ativo=true`, [desp.id]
         );
         if (empresas.rows.length > 0) {
+          const token = gerarToken({ id: desp.id, tipo: 'despachante' });
           return res.json({
-            success: true, tipo: 'despachante',
+            success: true, tipo: 'despachante', token,
             despachante: { id: desp.id, nome: desp.nome, cpf: desp.cpf, telefone: desp.telefone || '', empresas: empresas.rows },
           });
         }
@@ -197,8 +269,9 @@ app.post('/api/login-unificado', async (req, res) => {
     if (cliRes.rows.length > 0) {
       const cliente = cliRes.rows[0];
       if (await bcrypt.compare(senha, cliente.senha_hash)) {
+        const token = gerarToken({ id: cliente.id, tipo: 'cliente' });
         return res.json({
-          success: true, tipo: 'cliente',
+          success: true, tipo: 'cliente', token,
           cliente: {
             id: cliente.id, nome: cliente.nome, cpf: cliente.cpf, cnpj: cliente.cnpj || '',
             email: cliente.email, telefone: cliente.telefone, data_nascimento: cliente.data_nascimento || '',
@@ -240,8 +313,9 @@ app.post('/api/login', async (req, res) => {
       return res.status(403).json({ error: 'Assinatura inativa.' });
     }
 
+    const token = gerarToken({ id: empresa.id, tipo: 'empresa' });
     res.json({
-      success: true,
+      success: true, token,
       empresa: {
         id: empresa.id,
         nome_empresa: empresa.nome_empresa,
@@ -270,7 +344,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Buscar dados da empresa
-app.get('/api/empresa/:id', async (req, res) => {
+app.get('/api/empresa/:id', auth, async (req, res) => {
   try {
     const {id} = req.params;
     const result = await pool.query(
@@ -288,9 +362,13 @@ app.get('/api/empresa/:id', async (req, res) => {
 });
 
 // Atualizar dados da empresa
-app.put('/api/empresa/:id', async (req, res) => {
+app.put('/api/empresa/:id', auth, async (req, res) => {
   try {
     const {id} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa' || user.id !== id) {
+      return res.status(403).json({error: 'Sem permissão.'});
+    }
     const {nome_empresa, telefone, email, endereco, cidade, estado, cep, horario_funcionamento} = req.body;
     await pool.query(
       `UPDATE empresas SET nome_empresa=$1, telefone=$2, email=$3, endereco=$4, cidade=$5, estado=$6, cep=$7, horario_funcionamento=$8 WHERE id=$9`,
@@ -304,9 +382,13 @@ app.put('/api/empresa/:id', async (req, res) => {
 });
 
 // Atualizar dados do cliente
-app.put('/api/cliente/:id', async (req, res) => {
+app.put('/api/cliente/:id', auth, async (req, res) => {
   try {
     const {id} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'cliente' || user.id !== id) {
+      return res.status(403).json({error: 'Sem permissão.'});
+    }
     const {nome, telefone, email, data_nascimento, endereco, numero, bairro, complemento, cidade, estado, cep} = req.body;
     await pool.query(
       `UPDATE clientes SET nome=$1, telefone=$2, email=$3, data_nascimento=$4, endereco=$5, numero=$6, bairro=$7, complemento=$8, cidade=$9, estado=$10, cep=$11 WHERE id=$12`,
@@ -333,7 +415,7 @@ app.get('/api/lojas', async (req, res) => {
 });
 
 // Listar lojas vinculadas ao cliente
-app.get('/api/cliente/:id/lojas', async (req, res) => {
+app.get('/api/cliente/:id/lojas', auth, async (req, res) => {
   try {
     const {id} = req.params;
     const result = await pool.query(
@@ -349,9 +431,13 @@ app.get('/api/cliente/:id/lojas', async (req, res) => {
 });
 
 // Empresa cadastra cliente manualmente (vinculo sem conta no app)
-app.post('/api/empresa/:empresaId/cadastrar-cliente', async (req, res) => {
+app.post('/api/empresa/:empresaId/cadastrar-cliente', auth, async (req, res) => {
   try {
     const {empresaId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa' || user.id !== empresaId) {
+      return res.status(403).json({error: 'Sem permissão.'});
+    }
     const {nome, cpf, cnpj, rg, telefone, email, data_nascimento, cep, endereco, cidade, estado, observacoes} = req.body;
     if (!nome || (!cpf && !cnpj)) {
       return res.status(400).json({error: 'Preencha o nome e pelo menos CPF ou CNPJ.'});
@@ -386,9 +472,13 @@ app.post('/api/empresa/:empresaId/cadastrar-cliente', async (req, res) => {
 });
 
 // Vincular cliente a loja
-app.post('/api/cliente/:clienteId/vincular/:empresaId', async (req, res) => {
+app.post('/api/cliente/:clienteId/vincular/:empresaId', auth, async (req, res) => {
   try {
     const {clienteId, empresaId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'cliente' || user.id !== clienteId) {
+      return res.status(403).json({error: 'Sem permissão.'});
+    }
     const clienteRes = await pool.query('SELECT nome, cpf, cnpj FROM clientes WHERE id=$1', [clienteId]);
     if (clienteRes.rows.length === 0) return res.status(404).json({error: 'Cliente não encontrado.'});
     const {nome, cpf, cnpj} = clienteRes.rows[0];
@@ -451,7 +541,7 @@ app.post('/api/cliente/:clienteId/vincular/:empresaId', async (req, res) => {
 });
 
 // Salvar FCM token da empresa
-app.put('/api/empresa/:id/fcm-token', async (req, res) => {
+app.put('/api/empresa/:id/fcm-token', auth, async (req, res) => {
   try {
     const {id} = req.params;
     const {token} = req.body;
@@ -469,7 +559,7 @@ app.put('/api/empresa/:id/fcm-token', async (req, res) => {
 });
 
 // Listar notificacoes da empresa
-app.get('/api/empresa/:id/notificacoes', async (req, res) => {
+app.get('/api/empresa/:id/notificacoes', auth, async (req, res) => {
   try {
     const {id} = req.params;
     const result = await pool.query(
@@ -484,7 +574,7 @@ app.get('/api/empresa/:id/notificacoes', async (req, res) => {
 });
 
 // Contar notificacoes nao lidas
-app.get('/api/empresa/:id/notificacoes/nao-lidas', async (req, res) => {
+app.get('/api/empresa/:id/notificacoes/nao-lidas', auth, async (req, res) => {
   try {
     const {id} = req.params;
     const result = await pool.query(
@@ -499,7 +589,7 @@ app.get('/api/empresa/:id/notificacoes/nao-lidas', async (req, res) => {
 });
 
 // Marcar notificacoes como lidas
-app.put('/api/empresa/:id/notificacoes/marcar-lidas', async (req, res) => {
+app.put('/api/empresa/:id/notificacoes/marcar-lidas', auth, async (req, res) => {
   try {
     const {id} = req.params;
     await pool.query('UPDATE notificacoes SET lida=true WHERE empresa_id=$1 AND lida=false', [id]);
@@ -511,9 +601,13 @@ app.put('/api/empresa/:id/notificacoes/marcar-lidas', async (req, res) => {
 });
 
 // Desvincular cliente de loja
-app.delete('/api/cliente/:clienteId/desvincular/:empresaId', async (req, res) => {
+app.delete('/api/cliente/:clienteId/desvincular/:empresaId', auth, async (req, res) => {
   try {
     const {clienteId, empresaId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'cliente' || user.id !== clienteId) {
+      return res.status(403).json({error: 'Sem permissão.'});
+    }
     await pool.query(
       'DELETE FROM cliente_empresa WHERE cliente_id = $1 AND empresa_id = $2',
       [clienteId, empresaId]
@@ -526,7 +620,7 @@ app.delete('/api/cliente/:clienteId/desvincular/:empresaId', async (req, res) =>
 });
 
 // Listar clientes vinculados a uma empresa
-app.get('/api/empresa/:id/clientes', async (req, res) => {
+app.get('/api/empresa/:id/clientes', auth, async (req, res) => {
   try {
     const {id} = req.params;
     const result = await pool.query(
@@ -557,7 +651,7 @@ app.get('/api/empresa/:id/clientes', async (req, res) => {
 });
 
 // Atualizar dados do cliente (visão lojista - salva no vínculo)
-app.put('/api/empresa/vinculo/:vinculoId', async (req, res) => {
+app.put('/api/empresa/vinculo/:vinculoId', auth, async (req, res) => {
   try {
     const {vinculoId} = req.params;
     const {nome, cpf, cnpj, rg, telefone, email, data_nascimento, cep, endereco, cidade, estado, observacoes} = req.body;
@@ -574,7 +668,7 @@ app.put('/api/empresa/vinculo/:vinculoId', async (req, res) => {
 });
 
 // Bloquear cliente (não pode se vincular novamente)
-app.put('/api/empresa/vinculo/:vinculoId/bloquear', async (req, res) => {
+app.put('/api/empresa/vinculo/:vinculoId/bloquear', auth, async (req, res) => {
   try {
     const {vinculoId} = req.params;
     await pool.query('UPDATE cliente_empresa SET status=$1 WHERE id=$2', ['bloqueado', vinculoId]);
@@ -586,7 +680,7 @@ app.put('/api/empresa/vinculo/:vinculoId/bloquear', async (req, res) => {
 });
 
 // Excluir vinculo (cliente pode se vincular novamente)
-app.delete('/api/empresa/vinculo/:vinculoId', async (req, res) => {
+app.delete('/api/empresa/vinculo/:vinculoId', auth, async (req, res) => {
   try {
     const {vinculoId} = req.params;
     await pool.query('DELETE FROM cliente_empresa WHERE id=$1', [vinculoId]);
@@ -600,7 +694,7 @@ app.delete('/api/empresa/vinculo/:vinculoId', async (req, res) => {
 // === DESPACHANTES ===
 
 // Listar despachantes da empresa
-app.get('/api/empresa/:id/despachantes', async (req, res) => {
+app.get('/api/empresa/:id/despachantes', auth, async (req, res) => {
   try {
     const {id} = req.params;
     const result = await pool.query(
@@ -616,9 +710,13 @@ app.get('/api/empresa/:id/despachantes', async (req, res) => {
 });
 
 // Cadastrar despachante (cria conta + vincula à empresa)
-app.post('/api/empresa/:id/despachantes', async (req, res) => {
+app.post('/api/empresa/:id/despachantes', auth, async (req, res) => {
   try {
     const {id} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa' || user.id !== id) {
+      return res.status(403).json({error: 'Sem permissão.'});
+    }
     const {nome, cpf, telefone, senha} = req.body;
     if (!nome || !cpf || !senha) {
       return res.status(400).json({error: 'Preencha nome, CPF e senha.'});
@@ -651,7 +749,7 @@ app.post('/api/empresa/:id/despachantes', async (req, res) => {
 });
 
 // Atualizar despachante
-app.put('/api/despachantes/:despachanteId', async (req, res) => {
+app.put('/api/despachantes/:despachanteId', auth, async (req, res) => {
   try {
     const {despachanteId} = req.params;
     const {nome, cpf, telefone, senha} = req.body;
@@ -670,9 +768,13 @@ app.put('/api/despachantes/:despachanteId', async (req, res) => {
 });
 
 // Ativar/Desativar despachante (no vínculo com a empresa)
-app.put('/api/empresa/:empresaId/despachantes/:despachanteId/toggle', async (req, res) => {
+app.put('/api/empresa/:empresaId/despachantes/:despachanteId/toggle', auth, async (req, res) => {
   try {
     const {empresaId, despachanteId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa' || user.id !== empresaId) {
+      return res.status(403).json({error: 'Sem permissão.'});
+    }
     await pool.query('UPDATE despachante_empresa SET ativo = NOT ativo WHERE despachante_id=$1 AND empresa_id=$2', [despachanteId, empresaId]);
     res.json({success: true});
   } catch (err: any) {
@@ -682,9 +784,13 @@ app.put('/api/empresa/:empresaId/despachantes/:despachanteId/toggle', async (req
 });
 
 // Excluir vínculo do despachante com a empresa
-app.delete('/api/empresa/:empresaId/despachantes/:despachanteId', async (req, res) => {
+app.delete('/api/empresa/:empresaId/despachantes/:despachanteId', auth, async (req, res) => {
   try {
     const {empresaId, despachanteId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa' || user.id !== empresaId) {
+      return res.status(403).json({error: 'Sem permissão.'});
+    }
     await pool.query('DELETE FROM despachante_empresa WHERE despachante_id=$1 AND empresa_id=$2', [despachanteId, empresaId]);
     res.json({success: true});
   } catch (err: any) {
@@ -703,14 +809,14 @@ app.post('/api/login-despachante', async (req, res) => {
     const desp = result.rows[0];
     const senhaValida = await bcrypt.compare(senha, desp.senha_hash);
     if (!senhaValida) return res.status(401).json({error: 'Credenciais inv\u00e1lidas.'});
-    // Busca empresas vinculadas (ativas)
     const empresas = await pool.query(
       `SELECT e.id, e.nome_empresa FROM despachante_empresa de JOIN empresas e ON e.id = de.empresa_id
        WHERE de.despachante_id=$1 AND de.ativo=true`, [desp.id]
     );
     if (empresas.rows.length === 0) return res.status(403).json({error: 'Nenhuma empresa ativa vinculada.'});
+    const token = gerarToken({ id: desp.id, tipo: 'despachante' });
     res.json({
-      success: true,
+      success: true, token,
       despachante: {
         id: desp.id, nome: desp.nome, cpf: desp.cpf, telefone: desp.telefone || '',
         empresas: empresas.rows,
@@ -725,9 +831,13 @@ app.post('/api/login-despachante', async (req, res) => {
 // === PEDIDOS ===
 
 // Criar pedido
-app.post('/api/empresa/:empresaId/pedidos', async (req, res) => {
+app.post('/api/empresa/:empresaId/pedidos', auth, async (req, res) => {
   try {
     const {empresaId} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa' || user.id !== empresaId) {
+      return res.status(403).json({error: 'Sem permissão.'});
+    }
     const {cliente_id, despachante_id, excursao_id, cliente_nome, despachante_nome, excursao_nome, volumes, descricao} = req.body;
     if (!cliente_nome || !despachante_nome || !excursao_nome) {
       return res.status(400).json({error: 'Preencha cliente, despachante e excurs\u00e3o.'});
@@ -777,7 +887,7 @@ app.post('/api/empresa/:empresaId/pedidos', async (req, res) => {
 });
 
 // Salvar FCM token do cliente
-app.put('/api/cliente/:id/fcm-token', async (req, res) => {
+app.put('/api/cliente/:id/fcm-token', auth, async (req, res) => {
   try {
     const {id} = req.params;
     const {token} = req.body;
@@ -795,7 +905,7 @@ app.put('/api/cliente/:id/fcm-token', async (req, res) => {
 });
 
 // Listar pedidos da empresa
-app.get('/api/empresa/:empresaId/pedidos', async (req, res) => {
+app.get('/api/empresa/:empresaId/pedidos', auth, async (req, res) => {
   try {
     const {empresaId} = req.params;
     const result = await pool.query(
@@ -813,7 +923,7 @@ app.get('/api/empresa/:empresaId/pedidos', async (req, res) => {
 });
 
 // Listar pedidos do cliente
-app.get('/api/cliente/:clienteId/pedidos', async (req, res) => {
+app.get('/api/cliente/:clienteId/pedidos', auth, async (req, res) => {
   try {
     const {clienteId} = req.params;
     const result = await pool.query(
@@ -833,7 +943,7 @@ app.get('/api/cliente/:clienteId/pedidos', async (req, res) => {
 });
 
 // Listar pedidos do despachante
-app.get('/api/despachante/:despachanteId/pedidos', async (req, res) => {
+app.get('/api/despachante/:despachanteId/pedidos', auth, async (req, res) => {
   try {
     const {despachanteId} = req.params;
     const result = await pool.query(
@@ -853,7 +963,7 @@ app.get('/api/despachante/:despachanteId/pedidos', async (req, res) => {
 });
 
 // Atualizar status do pedido
-app.put('/api/pedidos/:pedidoId/status', async (req, res) => {
+app.put('/api/pedidos/:pedidoId/status', auth, async (req, res) => {
   try {
     const {pedidoId} = req.params;
     const {status} = req.body;
@@ -866,7 +976,7 @@ app.put('/api/pedidos/:pedidoId/status', async (req, res) => {
 });
 
 // Concluir etapa do pedido por ID
-app.put('/api/pedidos/:pedidoId/etapas/:etapaId/concluir', async (req, res) => {
+app.put('/api/pedidos/:pedidoId/etapas/:etapaId/concluir', auth, async (req, res) => {
   try {
     const {pedidoId, etapaId} = req.params;
     await pool.query('UPDATE pedido_etapas SET concluida=true, hora=NOW() WHERE id=$1 AND pedido_id=$2', [etapaId, pedidoId]);
@@ -885,7 +995,7 @@ app.put('/api/pedidos/:pedidoId/etapas/:etapaId/concluir', async (req, res) => {
 });
 
 // Concluir etapas por tipo (coleta ou entrega)
-app.put('/api/pedidos/:pedidoId/concluir-etapas', async (req, res) => {
+app.put('/api/pedidos/:pedidoId/concluir-etapas', auth, async (req, res) => {
   try {
     const {pedidoId} = req.params;
     const {tipo} = req.body; // 'coleta' ou 'entrega'
@@ -912,7 +1022,7 @@ app.put('/api/pedidos/:pedidoId/concluir-etapas', async (req, res) => {
 });
 
 // === PRESIGNED URL - Client faz upload DIRETO pro R2 (não passa pelo server) ===
-app.post('/api/pedidos/:pedidoId/upload-url', async (req, res) => {
+app.post('/api/pedidos/:pedidoId/upload-url', auth, async (req, res) => {
   try {
     const {pedidoId} = req.params;
     const {etapa, contentType, ext} = req.body;
@@ -946,7 +1056,7 @@ app.post('/api/pedidos/:pedidoId/upload-url', async (req, res) => {
 });
 
 // Upload de foto do pedido (fallback - mantém compatibilidade)
-app.post('/api/pedidos/:pedidoId/fotos', upload.single('foto'), async (req, res) => {
+app.post('/api/pedidos/:pedidoId/fotos', auth, upload.single('foto'), async (req, res) => {
   try {
     const {pedidoId} = req.params;
     const etapa = req.body.etapa || 'geral';
@@ -980,8 +1090,8 @@ app.post('/api/pedidos/:pedidoId/fotos', upload.single('foto'), async (req, res)
   }
 });
 
-// Salvar observa\u00e7\u00e3o do pedido (despachante)
-app.put('/api/pedidos/:pedidoId/observacao', async (req, res) => {
+// Salvar observação do pedido (despachante)
+app.put('/api/pedidos/:pedidoId/observacao', auth, async (req, res) => {
   try {
     const {pedidoId} = req.params;
     const {observacao} = req.body;
@@ -996,7 +1106,7 @@ app.put('/api/pedidos/:pedidoId/observacao', async (req, res) => {
 // === EXCURSÕES ===
 
 // Listar excursões da empresa
-app.get('/api/empresa/:id/excursoes', async (req, res) => {
+app.get('/api/empresa/:id/excursoes', auth, async (req, res) => {
   try {
     const {id} = req.params;
     const result = await pool.query(
@@ -1010,9 +1120,13 @@ app.get('/api/empresa/:id/excursoes', async (req, res) => {
 });
 
 // Cadastrar excursão
-app.post('/api/empresa/:id/excursoes', async (req, res) => {
+app.post('/api/empresa/:id/excursoes', auth, async (req, res) => {
   try {
     const {id} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'empresa' || user.id !== id) {
+      return res.status(403).json({error: 'Sem permissão.'});
+    }
     const {nome, setor, vaga, responsavel, telefone} = req.body;
     if (!nome || !setor || !vaga || !responsavel) {
       return res.status(400).json({error: 'Preencha todos os campos obrigatórios.'});
@@ -1029,7 +1143,7 @@ app.post('/api/empresa/:id/excursoes', async (req, res) => {
 });
 
 // Atualizar excursão
-app.put('/api/excursoes/:excursaoId', async (req, res) => {
+app.put('/api/excursoes/:excursaoId', auth, async (req, res) => {
   try {
     const {excursaoId} = req.params;
     const {nome, setor, vaga, responsavel, telefone} = req.body;
@@ -1045,7 +1159,7 @@ app.put('/api/excursoes/:excursaoId', async (req, res) => {
 });
 
 // Excluir excursão
-app.delete('/api/excursoes/:excursaoId', async (req, res) => {
+app.delete('/api/excursoes/:excursaoId', auth, async (req, res) => {
   try {
     const {excursaoId} = req.params;
     await pool.query('DELETE FROM excursoes WHERE id=$1', [excursaoId]);
@@ -1057,9 +1171,13 @@ app.delete('/api/excursoes/:excursaoId', async (req, res) => {
 });
 
 // Alterar senha do cliente
-app.put('/api/cliente/:id/alterar-senha', async (req, res) => {
+app.put('/api/cliente/:id/alterar-senha', auth, async (req, res) => {
   try {
     const {id} = req.params;
+    const user = (req as any).user as TokenPayload;
+    if (user.tipo !== 'cliente' || user.id !== id) {
+      return res.status(403).json({error: 'Sem permissão.'});
+    }
     const {senha_atual, nova_senha} = req.body;
     if (!senha_atual || !nova_senha) return res.status(400).json({error: 'Preencha todos os campos.'});
     if (nova_senha.length < 6) return res.status(400).json({error: 'A nova senha deve ter no m\u00ednimo 6 caracteres.'});
@@ -1116,8 +1234,9 @@ app.post('/api/login-cliente', async (req, res) => {
     if (!senhaValida) {
       return res.status(401).json({error: 'Credenciais inválidas.'});
     }
+    const token = gerarToken({ id: cliente.id, tipo: 'cliente' });
     res.json({
-      success: true,
+      success: true, token,
       cliente: {
         id: cliente.id, nome: cliente.nome, cpf: cliente.cpf, cnpj: cliente.cnpj || '',
         email: cliente.email, telefone: cliente.telefone, data_nascimento: cliente.data_nascimento || '',
