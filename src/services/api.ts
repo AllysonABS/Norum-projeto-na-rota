@@ -346,14 +346,26 @@ export async function concluirEtapaPedido(pedidoId: string, tipo: string): Promi
 
 export async function uploadFotoPedido(pedidoId: string, uri: string, etapa: string): Promise<{success: boolean; url?: string; error?: string}> {
   try {
-    const formData = new FormData();
-    formData.append('foto', {uri, name: 'foto.jpg', type: 'image/jpeg'} as any);
-    formData.append('etapa', etapa);
-    const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/fotos`, {
+    // 1. Pede presigned URL ao server (leve, não envia foto)
+    const presignRes = await fetch(`${API_URL}/api/pedidos/${pedidoId}/upload-url`, {
       method: 'POST',
-      body: formData,
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({etapa, contentType: 'image/jpeg', ext: 'jpg'}),
     });
-    return await res.json();
+    const presignData = await presignRes.json();
+    if (!presignData.success) return {success: false, error: presignData.error || 'Erro ao gerar URL.'};
+
+    // 2. Faz upload direto pro R2 via presigned URL
+    const fileRes = await fetch(uri);
+    const blob = await fileRes.blob();
+    const uploadRes = await fetch(presignData.uploadUrl, {
+      method: 'PUT',
+      headers: {'Content-Type': 'image/jpeg'},
+      body: blob,
+    });
+
+    if (!uploadRes.ok) return {success: false, error: 'Erro ao enviar foto.'};
+    return {success: true, url: presignData.publicUrl};
   } catch {
     return {success: false, error: 'Erro de conexão com o servidor.'};
   }
