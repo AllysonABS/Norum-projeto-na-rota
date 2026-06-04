@@ -32,7 +32,7 @@ export default function DespachantesScreen() {
   const [cpf, setCpf] = useState('');
   const [telefone, setTelefone] = useState('');
   const [senha, setSenha] = useState('');
-  const [menuAberto, setMenuAberto] = useState<string | null>(null);
+  const [menuAberto, setMenuAberto] = useState<{id: string; y: number; item: DespachanteData} | null>(null);
 
   const jaCarregou = useRef(false);
 
@@ -125,11 +125,7 @@ export default function DespachantesScreen() {
         <TextInput style={s.searchInput} placeholder="Buscar despachante..." placeholderTextColor={Colors.gray} value={busca} onChangeText={setBusca} />
       </View>
 
-      {menuAberto && (
-        <Pressable style={s.menuBackdrop} onPress={() => setMenuAberto(null)} />
-      )}
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{padding: 24, paddingTop: 0, gap: 10}} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.pulso} />}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{padding: 24, paddingTop: 0, gap: 10}} onScrollBeginDrag={() => setMenuAberto(null)} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.pulso} />}>
         {lista
           .filter(d => {
             const q = busca.toLowerCase();
@@ -146,30 +142,34 @@ export default function DespachantesScreen() {
               {d.telefone ? <Text style={s.tel}>{d.telefone}</Text> : null}
               {!d.ativo && <Text style={s.inativo}>Desativado</Text>}
             </View>
-            <View style={{position: 'relative'}}>
-              <TouchableOpacity onPress={() => setMenuAberto(menuAberto === d.id ? null : d.id)} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+            <View>
+              <TouchableOpacity onPress={(e) => setMenuAberto(menuAberto?.id === d.id ? null : {id: d.id, y: e.nativeEvent.pageY, item: d})} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
                 <Icon name="more-vertical" size={20} color={Colors.gray} />
               </TouchableOpacity>
-              {menuAberto === d.id && (
-                <View style={s.menuPopup}>
-                  <TouchableOpacity style={s.menuItem} onPress={() => { setMenuAberto(null); abrirEditar(d); }}>
-                    <Icon name="edit-2" size={14} color={Colors.clareza} />
-                    <Text style={s.menuItemText}>Editar</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={s.menuItem} onPress={() => { setMenuAberto(null); handleToggle(d); }}>
-                    <Icon name={d.ativo ? 'slash' : 'check-circle'} size={14} color={d.ativo ? '#F59E0B' : '#86EFAC'} />
-                    <Text style={[s.menuItemText, {color: d.ativo ? '#F59E0B' : '#86EFAC'}]}>{d.ativo ? 'Desativar' : 'Ativar'}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[s.menuItem, {borderBottomWidth: 0}]} onPress={() => { setMenuAberto(null); handleExcluir(d); }}>
-                    <Icon name="trash-2" size={14} color="#EF4444" />
-                    <Text style={[s.menuItemText, {color: '#EF4444'}]}>Excluir</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
             </View>
           </View>
         ))}
       </ScrollView>
+
+      {menuAberto && (
+        <>
+          <Pressable style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50}} onPress={() => setMenuAberto(null)} />
+          <View style={[s.menuPopup, {position: 'absolute', top: menuAberto.y - 10, right: 24, zIndex: 100}]}>
+            <TouchableOpacity style={s.menuItem} onPress={() => { setMenuAberto(null); abrirEditar(menuAberto.item); }}>
+              <Icon name="edit-2" size={14} color={Colors.clareza} />
+              <Text style={s.menuItemText}>Editar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.menuItem} onPress={() => { setMenuAberto(null); handleToggle(menuAberto.item); }}>
+              <Icon name={menuAberto.item.ativo ? 'slash' : 'check-circle'} size={14} color={menuAberto.item.ativo ? '#F59E0B' : '#86EFAC'} />
+              <Text style={[s.menuItemText, {color: menuAberto.item.ativo ? '#F59E0B' : '#86EFAC'}]}>{menuAberto.item.ativo ? 'Desativar' : 'Ativar'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.menuItem, {borderBottomWidth: 0}]} onPress={() => { setMenuAberto(null); handleExcluir(menuAberto.item); }}>
+              <Icon name="trash-2" size={14} color="#EF4444" />
+              <Text style={[s.menuItemText, {color: '#EF4444'}]}>Excluir</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
 
       <Modal visible={modal} transparent animationType="slide">
         <Pressable style={s.overlay} onPress={() => {limpar(); setModal(false);}}>
@@ -215,8 +215,7 @@ const s = StyleSheet.create({
   inativo:   {fontSize: 11, color: '#EF4444', marginTop: 2, fontWeight: '600'},
   cardActions:{flexDirection: 'row', gap: 12, alignItems: 'center'},
   iconBtn:   {fontSize: 18},
-  menuPopup: {position: 'absolute', top: 28, right: 0, backgroundColor: '#0F1F2E', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', width: 150, zIndex: 100, shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.3, shadowRadius: 8, elevation: 10},
-  menuBackdrop:{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50},
+  menuPopup: {backgroundColor: '#0F1F2E', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', width: 160, shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.3, shadowRadius: 8, elevation: 10},
   menuItem:  {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: '#1E3448'},
   menuItemText:{fontSize: 14, color: Colors.clareza, fontWeight: '500'},
   searchBox: {flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 14, backgroundColor: '#162433', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 14},

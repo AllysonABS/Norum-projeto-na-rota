@@ -107,10 +107,12 @@ export default function EmAndamentoScreen() {
                   <Text style={s.entregarText}>Entregar</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
+                  style={s.detalhesBtn}
                   onPress={() => setDetalhe(p)}
                   accessibilityRole="button"
                   accessibilityLabel={`Ver detalhes do pedido ${p.numero}`}>
-                  <Text style={s.verText}>Detalhes</Text>
+                  <Icon name="eye" size={14} color="#60A5FA" />
+                  <Text style={s.detalhesText}>Detalhes</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -172,7 +174,8 @@ const s = StyleSheet.create({
   actions:     {justifyContent: 'center', alignItems: 'center', gap: 14},
   entregarBtn: {backgroundColor: '#162433', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: Colors.pulso, flexDirection: 'row', alignItems: 'center', gap: 4},
   entregarText:{color: Colors.pulso, fontWeight: '700', fontSize: 13},
-  verText:     {fontSize: 11, color: Colors.gray, fontWeight: '600'},
+  detalhesBtn: {backgroundColor: '#162433', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#60A5FA', flexDirection: 'row', alignItems: 'center', gap: 4},
+  detalhesText:{color: '#60A5FA', fontWeight: '700', fontSize: 13},
   overlay:     {flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end'},
   sheet:       {backgroundColor: '#0F1F2E', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 28, paddingBottom: 40, maxHeight: '80%'},
   sheetTitle:  {fontSize: 20, fontWeight: '700', color: Colors.clareza, marginBottom: 16},

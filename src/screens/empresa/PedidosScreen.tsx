@@ -81,7 +81,9 @@ export default function PedidosScreen() {
   const {showToast} = useToast();
   const {show} = useAlert();
   const [pedidos, setPedidos] = useState<PedidoData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() =>
+    empresa?.id ? !getCachedPedidosEmpresa(empresa.id) : true
+  );
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<Status | 'todos'>('todos');
   const [detalhe, setDetalhe] = useState<PedidoData | null>(null);
@@ -125,6 +127,7 @@ export default function PedidosScreen() {
       const cached = empresa?.id ? getCachedPedidosEmpresa(empresa.id) : null;
       if (cached) {
         setPedidos(cached);
+        setLoading(false);
         jaCarregou.current = true;
         carregar();
       } else {

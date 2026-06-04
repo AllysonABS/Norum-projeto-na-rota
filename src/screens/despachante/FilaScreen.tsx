@@ -12,12 +12,10 @@ import Icon from '../../components/Icon';
 import EmptyState from '../../components/EmptyState';
 import {SkeletonCard} from '../../components/Skeleton';
 import OfflineBanner from '../../components/OfflineBanner';
-import {useLogout} from '../../hooks/useLogout';
 import {hapticLight} from '../../utils/haptics';
 
 export default function FilaScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<DespachanteStackParamList>>();
-  const logout = useLogout();
   const {despachante} = useAuth();
   const [pedidos, setPedidos] = useState<PedidoData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,18 +70,8 @@ export default function FilaScreen() {
     <View style={s.container}>
       <OfflineBanner />
       <View style={s.header}>
-        <View style={s.titleRow}>
-          <Text style={s.title} accessibilityRole="header">Fila de Expedição</Text>
-          <View style={s.badge}><Text style={s.badgeText}>{fila.length}</Text></View>
-        </View>
-        <TouchableOpacity
-          style={s.exitBtn}
-          onPress={logout}
-          accessibilityRole="button"
-          accessibilityLabel="Sair da conta">
-          <Icon name="log-out" size={16} color={Colors.pulso} />
-          <Text style={s.exitText}>Sair</Text>
-        </TouchableOpacity>
+        <Text style={s.title} accessibilityRole="header">Fila de Expedição</Text>
+        <View style={s.badge}><Text style={s.badgeText}>{fila.length}</Text></View>
       </View>
 
       <View style={s.resumoRow}>
@@ -167,10 +155,7 @@ export default function FilaScreen() {
 
 const s = StyleSheet.create({
   container:   {flex: 1, backgroundColor: Colors.matriz},
-  header:      {flexDirection: 'row', alignItems: 'center', padding: 24, paddingTop: 56, paddingBottom: 12, justifyContent: 'space-between'},
-  titleRow:    {flexDirection: 'row', alignItems: 'center', gap: 12},
-  exitBtn:     {backgroundColor: '#162433', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6},
-  exitText:    {color: Colors.pulso, fontSize: 13, fontWeight: '600'},
+  header:      {flexDirection: 'row', alignItems: 'center', padding: 24, paddingTop: 56, paddingBottom: 12, gap: 12},
   title:       {fontSize: 20, fontWeight: '700', color: Colors.clareza},
   badge:       {backgroundColor: Colors.pulso, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3},
   badgeText:   {color: Colors.matriz, fontWeight: '800', fontSize: 14},

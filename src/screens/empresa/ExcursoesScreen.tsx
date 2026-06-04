@@ -26,7 +26,7 @@ export default function ExcursoesScreen() {
   const [vaga, setVaga] = useState('');
   const [responsavel, setResponsavel] = useState('');
   const [telefone, setTelefone] = useState('');
-  const [menuAberto, setMenuAberto] = useState<string | null>(null);
+  const [menuAberto, setMenuAberto] = useState<{id: string; y: number; item: ExcursaoData} | null>(null);
 
   const jaCarregou = useRef(false);
 
@@ -113,11 +113,8 @@ export default function ExcursoesScreen() {
         <TextInput style={s.searchInput} placeholder="Buscar excursão..." placeholderTextColor={Colors.gray} value={busca} onChangeText={setBusca} />
       </View>
 
-      {menuAberto && (
-        <Pressable style={s.menuBackdrop} onPress={() => setMenuAberto(null)} />
-      )}
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{padding: 24, paddingTop: 0, gap: 12}} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.pulso} />}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{padding: 24, paddingTop: 0, gap: 12}} onScrollBeginDrag={() => setMenuAberto(null)} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.pulso} />}>
         {lista
           .filter(e => {
             const q = busca.toLowerCase();
@@ -133,22 +130,10 @@ export default function ExcursoesScreen() {
                 <Text style={s.vagaLabel}>Vaga</Text>
                 <Text style={s.vagaNum}>{e.vaga}</Text>
               </View>
-              <View style={{position: 'relative', marginLeft: 'auto'}}>
-                <TouchableOpacity onPress={() => setMenuAberto(menuAberto === e.id ? null : e.id)} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+              <View style={{marginLeft: 'auto'}}>
+                <TouchableOpacity onPress={(ev) => setMenuAberto(menuAberto?.id === e.id ? null : {id: e.id, y: ev.nativeEvent.pageY, item: e})} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
                   <Icon name="more-vertical" size={20} color={Colors.gray} />
                 </TouchableOpacity>
-                {menuAberto === e.id && (
-                  <View style={s.menuPopup}>
-                    <TouchableOpacity style={s.menuItem} onPress={() => { setMenuAberto(null); abrirEditar(e); }}>
-                      <Icon name="edit-2" size={14} color={Colors.clareza} />
-                      <Text style={s.menuItemText}>Editar</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[s.menuItem, {borderBottomWidth: 0}]} onPress={() => { setMenuAberto(null); excluir(e.id); }}>
-                      <Icon name="trash-2" size={14} color="#EF4444" />
-                      <Text style={[s.menuItemText, {color: '#EF4444'}]}>Excluir</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
               </View>
             </View>
             <Text style={s.nomeExcursao}>{e.nome}</Text>
@@ -159,6 +144,22 @@ export default function ExcursoesScreen() {
           </TouchableOpacity>
         ))}
       </ScrollView>
+
+      {menuAberto && (
+        <>
+          <Pressable style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50}} onPress={() => setMenuAberto(null)} />
+          <View style={[s.menuPopup, {position: 'absolute', top: menuAberto.y - 10, right: 24, zIndex: 100}]}>
+            <TouchableOpacity style={s.menuItem} onPress={() => { setMenuAberto(null); abrirEditar(menuAberto.item); }}>
+              <Icon name="edit-2" size={14} color={Colors.clareza} />
+              <Text style={s.menuItemText}>Editar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.menuItem, {borderBottomWidth: 0}]} onPress={() => { setMenuAberto(null); excluir(menuAberto.item.id); }}>
+              <Icon name="trash-2" size={14} color="#EF4444" />
+              <Text style={[s.menuItemText, {color: '#EF4444'}]}>Excluir</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
 
       {/* Modal detalhes */}
       <Modal visible={!!detalhe} transparent animationType="slide">
@@ -235,8 +236,7 @@ const s = StyleSheet.create({
   cardTop:      {flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10},
   cardActions:  {flexDirection: 'row', gap: 12, marginLeft: 'auto'},
   iconBtn:      {fontSize: 18},
-  menuPopup:    {position: 'absolute', top: 28, right: 0, backgroundColor: '#0F1F2E', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', width: 150, zIndex: 100, shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.3, shadowRadius: 8, elevation: 10},
-  menuBackdrop: {position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50},
+  menuPopup:    {backgroundColor: '#0F1F2E', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', width: 160, shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.3, shadowRadius: 8, elevation: 10},
   menuItem:     {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: '#1E3448'},
   menuItemText: {fontSize: 14, color: Colors.clareza, fontWeight: '500'},
   searchBox:    {flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 14, backgroundColor: '#162433', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 14},
