@@ -799,12 +799,11 @@ app.put('/api/pedidos/:pedidoId/status', async (req, res) => {
   }
 });
 
-// Concluir etapa do pedido
+// Concluir etapa do pedido por ID
 app.put('/api/pedidos/:pedidoId/etapas/:etapaId/concluir', async (req, res) => {
   try {
     const {pedidoId, etapaId} = req.params;
     await pool.query('UPDATE pedido_etapas SET concluida=true, hora=NOW() WHERE id=$1 AND pedido_id=$2', [etapaId, pedidoId]);
-    // Verifica se todas as etapas foram conclu\u00eddas
     const total = await pool.query('SELECT COUNT(*)::int as total FROM pedido_etapas WHERE pedido_id=$1', [pedidoId]);
     const concluidas = await pool.query('SELECT COUNT(*)::int as total FROM pedido_etapas WHERE pedido_id=$1 AND concluida=true', [pedidoId]);
     if (concluidas.rows[0].total >= total.rows[0].total) {
@@ -815,6 +814,33 @@ app.put('/api/pedidos/:pedidoId/etapas/:etapaId/concluir', async (req, res) => {
     res.json({success: true});
   } catch (err: any) {
     console.error('Erro ao concluir etapa:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Concluir etapas por tipo (coleta ou entrega)
+app.put('/api/pedidos/:pedidoId/concluir-etapas', async (req, res) => {
+  try {
+    const {pedidoId} = req.params;
+    const {tipo} = req.body; // 'coleta' ou 'entrega'
+    if (tipo === 'coleta') {
+      // Marca "Coleta realizada" e "Em rota para excurs\u00e3o"
+      await pool.query(
+        `UPDATE pedido_etapas SET concluida=true, hora=NOW() WHERE pedido_id=$1 AND nome IN ('Coleta realizada', 'Em rota para excurs\u00e3o') AND concluida=false`,
+        [pedidoId]
+      );
+      await pool.query('UPDATE pedidos SET status=$1, atualizado_em=NOW() WHERE id=$2', ['em_transito', pedidoId]);
+    } else if (tipo === 'entrega') {
+      // Marca todas as etapas restantes
+      await pool.query(
+        'UPDATE pedido_etapas SET concluida=true, hora=NOW() WHERE pedido_id=$1 AND concluida=false',
+        [pedidoId]
+      );
+      await pool.query('UPDATE pedidos SET status=$1, atualizado_em=NOW() WHERE id=$2', ['entregue', pedidoId]);
+    }
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao concluir etapas:', err);
     res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });
