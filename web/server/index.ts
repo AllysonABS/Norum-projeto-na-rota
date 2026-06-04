@@ -6,6 +6,22 @@ import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
 import admin from 'firebase-admin';
 import { readFileSync, existsSync } from 'fs';
+import multer from 'multer';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import crypto from 'crypto';
+
+// R2 (Cloudflare) config
+const r2 = new S3Client({
+  region: 'auto',
+  endpoint: process.env.R2_ENDPOINT || 'https://0202dec50e9ba69b8d2697d64b2522ae.r2.cloudflarestorage.com',
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
+  },
+});
+const R2_BUCKET = process.env.R2_BUCKET || 'norumnarota';
+const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://pub-035640b4d7b74fdd83d9ff2d64414b2e.r2.dev';
+const upload = multer({storage: multer.memoryStorage(), limits: {fileSize: 10 * 1024 * 1024}});
 
 // Inicializa Firebase Admin
 const __filename = fileURLToPath(import.meta.url);
@@ -841,6 +857,49 @@ app.put('/api/pedidos/:pedidoId/concluir-etapas', async (req, res) => {
     res.json({success: true});
   } catch (err: any) {
     console.error('Erro ao concluir etapas:', err);
+    res.status(500).json({error: 'Erro interno do servidor.'});
+  }
+});
+
+// Upload de foto do pedido
+app.post('/api/pedidos/:pedidoId/fotos', upload.single('foto'), async (req, res) => {
+  try {
+    const {pedidoId} = req.params;
+    const etapa = req.body.etapa || 'geral';
+    const file = req.file;
+    if (!file) return res.status(400).json({error: 'Nenhuma foto enviada.'});
+
+    const ext = file.originalname.split('.').pop() || 'jpg';
+    const key = `pedidos/${pedidoId}/${crypto.randomUUID()}.${ext}`;
+
+    await r2.send(new PutObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key,
+      Body: file.buffer,
+      ContentType: file.mimetype,
+    }));
+
+    const url = `${R2_PUBLIC_URL}/${key}`;
+    await pool.query(
+      'INSERT INTO pedido_fotos (pedido_id, url, etapa) VALUES ($1, $2, $3)',
+      [pedidoId, url, etapa]
+    );
+    res.status(201).json({success: true, url});
+  } catch (err: any) {
+    console.error('Erro ao fazer upload:', err);
+    res.status(500).json({error: 'Erro ao enviar foto.'});
+  }
+});
+
+// Salvar observa\u00e7\u00e3o do pedido (despachante)
+app.put('/api/pedidos/:pedidoId/observacao', async (req, res) => {
+  try {
+    const {pedidoId} = req.params;
+    const {observacao} = req.body;
+    await pool.query('UPDATE pedidos SET observacao=$1, atualizado_em=NOW() WHERE id=$2', [observacao || null, pedidoId]);
+    res.json({success: true});
+  } catch (err: any) {
+    console.error('Erro ao salvar observa\u00e7\u00e3o:', err);
     res.status(500).json({error: 'Erro interno do servidor.'});
   }
 });
