@@ -869,8 +869,14 @@ app.post('/api/pedidos/:pedidoId/fotos', upload.single('foto'), async (req, res)
     const file = req.file;
     if (!file) return res.status(400).json({error: 'Nenhuma foto enviada.'});
 
+    // Busca empresa_id e cliente_nome do pedido para organizar no R2
+    const pedidoRes = await pool.query('SELECT empresa_id, cliente_nome FROM pedidos WHERE id=$1', [pedidoId]);
+    if (pedidoRes.rows.length === 0) return res.status(404).json({error: 'Pedido n\u00e3o encontrado.'});
+    const {empresa_id, cliente_nome} = pedidoRes.rows[0];
+    const clienteSlug = (cliente_nome || 'sem-cliente').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+
     const ext = file.originalname.split('.').pop() || 'jpg';
-    const key = `pedidos/${pedidoId}/${crypto.randomUUID()}.${ext}`;
+    const key = `${empresa_id}/${clienteSlug}/${pedidoId}/${crypto.randomUUID()}.${ext}`;
 
     await r2.send(new PutObjectCommand({
       Bucket: R2_BUCKET,
