@@ -14,7 +14,7 @@ import cluster from 'cluster';
 import os from 'os';
 
 // === CLUSTER MODE ===
-const NUM_WORKERS = parseInt(process.env.WORKERS || '') || Math.min(os.cpus().length, 8);
+const NUM_WORKERS = parseInt(process.env.WORKERS || '') || Math.min(os.cpus().length, 4);
 
 if (cluster.isPrimary && process.env.NODE_ENV === 'production') {
   console.log(`[CLUSTER] Primary ${process.pid} starting ${NUM_WORKERS} workers`);
@@ -100,9 +100,9 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   ssl: process.env.DB_SSL === 'true',
-  max: parseInt(process.env.DB_POOL_MAX || '50'),
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  max: parseInt(process.env.DB_POOL_MAX || '20'),
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 3000,
 });
 
 // Cadastro de empresa
