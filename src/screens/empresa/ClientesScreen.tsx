@@ -1,4 +1,4 @@
-import React, {useState, useCallback} from 'react';
+import React, {useState, useCallback, useRef} from 'react';
 import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, RefreshControl, ActivityIndicator, Pressable} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
@@ -59,6 +59,8 @@ export default function ClientesScreen() {
   const [estado, setEstado] = useState('');
   const [observacoes, setObservacoes] = useState('');
 
+  const jaCarregou = useRef(false);
+
   const carregar = async () => {
     if (!empresa?.id) return;
     const res = await listarClientesEmpresa(empresa.id);
@@ -66,8 +68,12 @@ export default function ClientesScreen() {
   };
 
   useFocusEffect(useCallback(() => {
-    setLoading(true);
-    carregar().finally(() => setLoading(false));
+    if (!jaCarregou.current) {
+      setLoading(true);
+      carregar().finally(() => { setLoading(false); jaCarregou.current = true; });
+    } else {
+      carregar();
+    }
   }, [empresa?.id]));
 
   const onRefresh = useCallback(() => {

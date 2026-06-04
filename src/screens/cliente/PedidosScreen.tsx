@@ -1,4 +1,4 @@
-import React, {useState, useCallback, useEffect} from 'react';
+import React, {useState, useCallback, useEffect, useRef} from 'react';
 import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, RefreshControl, ActivityIndicator, Image, Pressable} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
@@ -46,6 +46,8 @@ export default function PedidosScreen() {
     return unsub;
   }, [cliente?.id]);
 
+  const jaCarregou = useRef(false);
+
   const carregar = async () => {
     if (!cliente?.id) return;
     const res = await listarPedidosCliente(cliente.id);
@@ -53,8 +55,12 @@ export default function PedidosScreen() {
   };
 
   useFocusEffect(useCallback(() => {
-    setLoading(true);
-    carregar().finally(() => setLoading(false));
+    if (!jaCarregou.current) {
+      setLoading(true);
+      carregar().finally(() => { setLoading(false); jaCarregou.current = true; });
+    } else {
+      carregar();
+    }
   }, [cliente?.id]));
 
   const onRefresh = useCallback(() => {

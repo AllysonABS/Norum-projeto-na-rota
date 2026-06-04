@@ -1,4 +1,4 @@
-import React, {useState, useCallback} from 'react';
+import React, {useState, useCallback, useRef} from 'react';
 import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, RefreshControl, ActivityIndicator, Pressable} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
@@ -15,6 +15,8 @@ export default function HistoricoScreen() {
   const [detalhe, setDetalhe] = useState<PedidoData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  const jaCarregou = useRef(false);
+
   const carregar = async () => {
     if (!despachante?.id) return;
     const res = await listarPedidosDespachante(despachante.id);
@@ -22,8 +24,12 @@ export default function HistoricoScreen() {
   };
 
   useFocusEffect(useCallback(() => {
-    setLoading(true);
-    carregar().finally(() => setLoading(false));
+    if (!jaCarregou.current) {
+      setLoading(true);
+      carregar().finally(() => { setLoading(false); jaCarregou.current = true; });
+    } else {
+      carregar();
+    }
   }, [despachante?.id]));
 
   const onRefresh = useCallback(() => {

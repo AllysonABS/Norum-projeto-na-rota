@@ -1,4 +1,4 @@
-import React, {useState, useCallback} from 'react';
+import React, {useState, useCallback, useRef} from 'react';
 import {View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, ActivityIndicator} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {useFocusEffect} from '@react-navigation/native';
@@ -21,6 +21,8 @@ export default function NotificacoesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const jaCarregou = useRef(false);
+
   const carregar = async () => {
     if (!empresa?.id) return;
     const res = await listarNotificacoes(empresa.id);
@@ -28,8 +30,12 @@ export default function NotificacoesScreen() {
   };
 
   useFocusEffect(useCallback(() => {
-    setLoading(true);
-    carregar().finally(() => setLoading(false));
+    if (!jaCarregou.current) {
+      setLoading(true);
+      carregar().finally(() => { setLoading(false); jaCarregou.current = true; });
+    } else {
+      carregar();
+    }
     if (empresa?.id) marcarNotificacoesLidas(empresa.id);
   }, [empresa?.id]));
 

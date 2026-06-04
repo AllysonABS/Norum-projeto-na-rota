@@ -1,4 +1,4 @@
-import React, {useState, useCallback} from 'react';
+import React, {useState, useCallback, useRef} from 'react';
 import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, RefreshControl, ActivityIndicator, Pressable} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {useFocusEffect} from '@react-navigation/native';
@@ -28,6 +28,8 @@ export default function ExcursoesScreen() {
   const [telefone, setTelefone] = useState('');
   const [menuAberto, setMenuAberto] = useState<string | null>(null);
 
+  const jaCarregou = useRef(false);
+
   const carregar = async () => {
     if (!empresa?.id) return;
     const res = await listarExcursoes(empresa.id);
@@ -35,8 +37,12 @@ export default function ExcursoesScreen() {
   };
 
   useFocusEffect(useCallback(() => {
-    setLoading(true);
-    carregar().finally(() => setLoading(false));
+    if (!jaCarregou.current) {
+      setLoading(true);
+      carregar().finally(() => { setLoading(false); jaCarregou.current = true; });
+    } else {
+      carregar();
+    }
   }, [empresa?.id]));
 
   const limpar = () => {

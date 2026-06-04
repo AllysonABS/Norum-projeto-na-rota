@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useCallback} from 'react';
+import React, {useState, useEffect, useCallback, useRef} from 'react';
 import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Animated} from 'react-native';
 import {useNavigation, useFocusEffect} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -33,6 +33,7 @@ export default function EmpresaDashboard() {
   const [totalDespachantes, setTotalDespachantes] = useState(0);
   const [totalExcursoes, setTotalExcursoes] = useState(0);
   const [loading, setLoading] = useState(true);
+  const jaCarregou = useRef(false);
 
   useEffect(() => {
     (async () => {
@@ -46,14 +47,19 @@ export default function EmpresaDashboard() {
 
   useFocusEffect(useCallback(() => {
     if (!empresa?.id) return;
-    setLoading(true);
-    Promise.all([
+    const carregar = () => Promise.all([
       contarNotificacoesNaoLidas(empresa.id).then(r => { if (r.success) setNaoLidas(r.total || 0); }),
       listarPedidosEmpresa(empresa.id).then(r => { if (r.success && r.pedidos) setPedidos(r.pedidos); }),
       listarClientesEmpresa(empresa.id).then(r => { if (r.success && r.clientes) setTotalClientes(r.clientes.length); }),
       listarDespachantes(empresa.id).then(r => { if (r.success && r.despachantes) setTotalDespachantes(r.despachantes.length); }),
       listarExcursoes(empresa.id).then(r => { if (r.success && r.excursoes) setTotalExcursoes(r.excursoes.length); }),
-    ]).finally(() => setLoading(false));
+    ]);
+    if (!jaCarregou.current) {
+      setLoading(true);
+      carregar().finally(() => { setLoading(false); jaCarregou.current = true; });
+    } else {
+      carregar();
+    }
   }, [empresa?.id]));
 
   useFocusEffect(useCallback(() => {

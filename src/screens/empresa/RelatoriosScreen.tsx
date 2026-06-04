@@ -1,4 +1,4 @@
-import React, {useState, useCallback} from 'react';
+import React, {useState, useCallback, useRef} from 'react';
 import {View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, RefreshControl} from 'react-native';
 import {useNavigation, useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
@@ -37,10 +37,12 @@ export default function RelatoriosScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const jaCarregou = useRef(false);
 
   const carregarDados = useCallback(async (isRefresh = false) => {
     if (!empresa?.id) return;
-    if (isRefresh) setRefreshing(true); else setLoading(true);
+    if (isRefresh) setRefreshing(true);
+    else if (!jaCarregou.current) setLoading(true);
     setErro(null);
     try {
       const [resPed, resDesp] = await Promise.all([
@@ -57,6 +59,7 @@ export default function RelatoriosScreen() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      jaCarregou.current = true;
     }
   }, [empresa?.id]);
 

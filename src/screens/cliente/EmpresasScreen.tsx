@@ -1,4 +1,4 @@
-import React, {useState, useCallback} from 'react';
+import React, {useState, useCallback, useRef} from 'react';
 import {View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
@@ -13,13 +13,15 @@ export default function EmpresasScreen({navigation}: any) {
   const [busca, setBusca] = useState('');
   const [lojas, setLojas] = useState<LojaData[]>([]);
   const [loading, setLoading] = useState(true);
+  const jaCarregou = useRef(false);
 
   const carregar = async () => {
     if (!cliente?.id) return;
-    setLoading(true);
+    if (!jaCarregou.current) setLoading(true);
     const res = await listarMinhasLojas(cliente.id);
     if (res.success && res.lojas) setLojas(res.lojas);
     setLoading(false);
+    jaCarregou.current = true;
   };
 
   useFocusEffect(useCallback(() => { carregar(); }, [cliente?.id]));

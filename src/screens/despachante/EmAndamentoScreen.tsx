@@ -1,4 +1,4 @@
-import React, {useState, useCallback} from 'react';
+import React, {useState, useCallback, useRef} from 'react';
 import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, RefreshControl, Pressable} from 'react-native';
 import {useNavigation, useFocusEffect} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -24,6 +24,7 @@ export default function EmAndamentoScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const isOnline = useNetworkStatus();
+  const jaCarregou = useRef(false);
 
   const carregar = async () => {
     if (!despachante?.id) return;
@@ -40,8 +41,12 @@ export default function EmAndamentoScreen() {
   };
 
   useFocusEffect(useCallback(() => {
-    setLoading(true);
-    carregar().finally(() => setLoading(false));
+    if (!jaCarregou.current) {
+      setLoading(true);
+      carregar().finally(() => { setLoading(false); jaCarregou.current = true; });
+    } else {
+      carregar();
+    }
   }, [despachante?.id]));
 
   const onRefresh = useCallback(() => {

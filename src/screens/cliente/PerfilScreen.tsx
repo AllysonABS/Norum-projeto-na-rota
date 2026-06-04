@@ -166,7 +166,13 @@ export default function PerfilScreen() {
   return (
     <View style={s.wrapper}>
       <Toast />
-      <ScrollView style={s.container} contentContainerStyle={s.content}>
+      <ScrollView
+        style={s.container}
+        contentContainerStyle={s.content}
+        nestedScrollEnabled={true}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}>
         <View style={s.avatarWrap}>
           <View style={s.avatar}><Text style={s.avatarText}>{nome ? nome[0].toUpperCase() : '?'}</Text></View>
           <Text style={s.nome}>{nome || 'Cliente'}</Text>

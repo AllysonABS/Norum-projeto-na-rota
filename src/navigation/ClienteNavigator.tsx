@@ -53,6 +53,8 @@ export default function ClienteNavigator() {
         tabBarLabelStyle: {fontSize: 11, fontWeight: '600', textTransform: 'none'},
         tabBarIndicatorStyle: {backgroundColor: Colors.pulso, top: 0, height: 3, borderRadius: 2},
         tabBarPressColor: 'transparent',
+        swipeEnabled: true,
+        animationEnabled: true,
       })}>
       <Tab.Screen name="Pedidos" component={PedidosScreen} />
       <Tab.Screen name="Lojas" component={EmpresasStackNavigator} />
