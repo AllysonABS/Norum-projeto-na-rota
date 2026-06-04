@@ -1,7 +1,7 @@
 import 'react-native-gesture-handler';
 import React from 'react';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
-import {Keyboard, TouchableWithoutFeedback} from 'react-native';
+import {Keyboard, Pressable} from 'react-native';
 import AppNavigator from './src/navigation/AppNavigator';
 import {AuthProvider} from './src/context/AuthContext';
 import {AlertProvider} from './src/components/CustomAlert';
@@ -11,9 +11,9 @@ export default function App() {
     <AuthProvider>
       <AlertProvider>
         <SafeAreaProvider>
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <Pressable onPress={Keyboard.dismiss} style={{flex: 1}}>
             <AppNavigator />
-          </TouchableWithoutFeedback>
+          </Pressable>
         </SafeAreaProvider>
       </AlertProvider>
     </AuthProvider>

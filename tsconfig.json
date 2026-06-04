@@ -5,5 +5,5 @@
     "skipLibCheck": true,
     "types": []
   },
-  "exclude": ["node_modules", "vendor", "ios", "android"]
+  "exclude": ["node_modules", "vendor", "ios", "android", "web", "load-tests"]
 }

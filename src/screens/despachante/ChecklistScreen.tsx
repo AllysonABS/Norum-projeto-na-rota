@@ -9,7 +9,10 @@ import {DespachanteStackParamList} from '../../navigation/DespachanteNavigator';
 import {Colors} from '../../theme/colors';
 import {useAlert} from '../../components/CustomAlert';
 import {concluirEtapaPedido, atualizarStatusPedido, uploadFotoPedido, salvarObservacaoPedido} from '../../services/api';
+import {addToQueue} from '../../services/offlineQueue';
+import {useNetworkStatus} from '../../hooks/useNetworkStatus';
 import Icon from '../../components/Icon';
+import OfflineBanner from '../../components/OfflineBanner';
 import {hapticLight, hapticSuccess, hapticWarning} from '../../utils/haptics';
 
 async function solicitarPermissaoCamera(): Promise<boolean> {
@@ -48,6 +51,7 @@ export default function ChecklistScreen({route, navigation}: Props) {
   const {pedidoId, etapa} = route.params;
   const itens = etapa === 'coleta' ? checklistColeta : checklistEntrega;
   const {show} = useAlert();
+  const isOnline = useNetworkStatus();
 
   const [marcados, setMarcados] = useState<boolean[]>(new Array(itens.length).fill(false));
   const [fotos, setFotos] = useState<string[]>([]);
@@ -104,25 +108,34 @@ export default function ChecklistScreen({route, navigation}: Props) {
 
     setLoading(true);
 
-    for (const uri of fotos) {
-      await uploadFotoPedido(pedidoId, uri, etapa);
+    if (isOnline) {
+      for (const uri of fotos) {
+        await uploadFotoPedido(pedidoId, uri, etapa);
+      }
+      if (observacao.trim()) {
+        await salvarObservacaoPedido(pedidoId, observacao.trim());
+      }
+      await concluirEtapaPedido(pedidoId, etapa);
+    } else {
+      for (const uri of fotos) {
+        await addToQueue({type: 'upload_foto', payload: {pedidoId, uri, etapa}});
+      }
+      if (observacao.trim()) {
+        await addToQueue({type: 'salvar_observacao', payload: {pedidoId, observacao: observacao.trim()}});
+      }
+      await addToQueue({type: 'concluir_etapa', payload: {pedidoId, tipo: etapa}});
     }
-
-    if (observacao.trim()) {
-      await salvarObservacaoPedido(pedidoId, observacao.trim());
-    }
-
-    await concluirEtapaPedido(pedidoId, etapa);
 
     setLoading(false);
     hapticSuccess();
 
+    const msgExtra = isOnline ? '' : '\nSerá sincronizado quando a internet voltar.';
     if (etapa === 'coleta') {
-      show({title: 'Coleta confirmada!', message: 'Pedido em rota para excursão.', type: 'success', buttons: [
+      show({title: 'Coleta confirmada!', message: `Pedido em rota para excursão.${msgExtra}`, type: 'success', buttons: [
         {text: 'OK', onPress: () => navigation.goBack()},
       ]});
     } else {
-      show({title: 'Entrega confirmada!', message: 'Pedido finalizado com sucesso.', type: 'success', buttons: [
+      show({title: 'Entrega confirmada!', message: `Pedido finalizado com sucesso.${msgExtra}`, type: 'success', buttons: [
         {text: 'OK', onPress: () => navigation.goBack()},
       ]});
     }
@@ -132,6 +145,7 @@ export default function ChecklistScreen({route, navigation}: Props) {
 
   return (
     <View style={s.container}>
+      <OfflineBanner />
       <View style={s.topBar}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}

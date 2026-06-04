@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect} from 'react';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createMaterialTopTabNavigator} from '@react-navigation/material-top-tabs';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import FilaScreen from '../screens/despachante/FilaScreen';
 import EmAndamentoScreen from '../screens/despachante/EmAndamentoScreen';
 import HistoricoScreen from '../screens/despachante/HistoricoScreen';
 import ChecklistScreen from '../screens/despachante/ChecklistScreen';
+import {startSyncListener, stopSyncListener} from '../services/syncManager';
 
 export type DespachanteStackParamList = {
   Tabs: undefined;
@@ -56,6 +57,11 @@ function Tabs() {
 }
 
 export default function DespachanteNavigator() {
+  useEffect(() => {
+    startSyncListener();
+    return () => stopSyncListener();
+  }, []);
+
   return (
     <Stack.Navigator id="despachanteStack" screenOptions={{headerShown: false}}>
       <Stack.Screen name="Tabs" component={Tabs} />

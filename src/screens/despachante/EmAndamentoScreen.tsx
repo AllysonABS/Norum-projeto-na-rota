@@ -6,9 +6,12 @@ import {DespachanteStackParamList} from '../../navigation/DespachanteNavigator';
 import {Colors} from '../../theme/colors';
 import {useAuth} from '../../context/AuthContext';
 import {listarPedidosDespachante, PedidoData} from '../../services/api';
+import {cachePedidos, getCachedPedidos} from '../../services/offlineQueue';
+import {useNetworkStatus} from '../../hooks/useNetworkStatus';
 import {formatHora} from '../../utils/date';
 import Icon from '../../components/Icon';
 import EmptyState from '../../components/EmptyState';
+import OfflineBanner from '../../components/OfflineBanner';
 import {SkeletonCard} from '../../components/Skeleton';
 import {hapticLight} from '../../utils/haptics';
 
@@ -20,10 +23,20 @@ export default function EmAndamentoScreen() {
   const [detalhe, setDetalhe] = useState<PedidoData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  const isOnline = useNetworkStatus();
+
   const carregar = async () => {
     if (!despachante?.id) return;
-    const res = await listarPedidosDespachante(despachante.id);
-    if (res.success && res.pedidos) setPedidos(res.pedidos.filter(p => p.status === 'em_transito'));
+    if (isOnline) {
+      const res = await listarPedidosDespachante(despachante.id);
+      if (res.success && res.pedidos) {
+        setPedidos(res.pedidos.filter(p => p.status === 'em_transito'));
+        cachePedidos(despachante.id, res.pedidos);
+      }
+    } else {
+      const cached = await getCachedPedidos(despachante.id);
+      if (cached) setPedidos(cached.filter((p: PedidoData) => p.status === 'em_transito'));
+    }
   };
 
   useFocusEffect(useCallback(() => {
@@ -43,6 +56,7 @@ export default function EmAndamentoScreen() {
 
   return (
     <View style={s.container}>
+      <OfflineBanner />
       <View style={s.header}>
         <Text style={s.title} accessibilityRole="header">Em Andamento</Text>
         <View style={s.badge}><Text style={s.badgeText}>{pedidos.length}</Text></View>

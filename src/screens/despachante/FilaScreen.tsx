@@ -6,9 +6,12 @@ import {DespachanteStackParamList} from '../../navigation/DespachanteNavigator';
 import {Colors} from '../../theme/colors';
 import {useAuth} from '../../context/AuthContext';
 import {listarPedidosDespachante, PedidoData} from '../../services/api';
+import {cachePedidos, getCachedPedidos} from '../../services/offlineQueue';
+import {useNetworkStatus} from '../../hooks/useNetworkStatus';
 import Icon from '../../components/Icon';
 import EmptyState from '../../components/EmptyState';
 import {SkeletonCard} from '../../components/Skeleton';
+import OfflineBanner from '../../components/OfflineBanner';
 import {useLogout} from '../../hooks/useLogout';
 import {hapticLight} from '../../utils/haptics';
 
@@ -21,10 +24,20 @@ export default function FilaScreen() {
   const [busca, setBusca] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
+  const isOnline = useNetworkStatus();
+
   const carregar = async () => {
     if (!despachante?.id) return;
-    const res = await listarPedidosDespachante(despachante.id);
-    if (res.success && res.pedidos) setPedidos(res.pedidos);
+    if (isOnline) {
+      const res = await listarPedidosDespachante(despachante.id);
+      if (res.success && res.pedidos) {
+        setPedidos(res.pedidos);
+        cachePedidos(despachante.id, res.pedidos);
+      }
+    } else {
+      const cached = await getCachedPedidos(despachante.id);
+      if (cached) setPedidos(cached);
+    }
   };
 
   useFocusEffect(useCallback(() => {
@@ -52,6 +65,7 @@ export default function FilaScreen() {
 
   return (
     <View style={s.container}>
+      <OfflineBanner />
       <View style={s.header}>
         <View style={s.titleRow}>
           <Text style={s.title} accessibilityRole="header">Fila de Expedição</Text>
