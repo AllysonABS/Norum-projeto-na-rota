@@ -5,6 +5,7 @@ import {Colors} from '../../theme/colors';
 import {useAuth} from '../../context/AuthContext';
 import {listarTodasLojas, vincularLoja, listarMinhasLojas, LojaData} from '../../services/api';
 import {useAlert} from '../../components/CustomAlert';
+import Icon from '../../components/Icon';
 
 export default function BuscarLojasScreen() {
   const navigation = useNavigation();
@@ -53,15 +54,16 @@ export default function BuscarLojasScreen() {
   return (
     <View style={s.container}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={s.backText}>← Voltar</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12}}>
+          <Icon name="arrow-left" size={18} color={Colors.pulso} />
+          <Text style={s.backText}>Voltar</Text>
         </TouchableOpacity>
         <Text style={s.title}>Buscar Lojas</Text>
         <Text style={s.sub}>Encontre e vincule-se a lojas disponíveis</Text>
       </View>
 
       <View style={s.searchBox}>
-        <Text style={s.searchIcon}>🔍</Text>
+        <Icon name="search" size={16} color={Colors.gray} />
         <TextInput style={s.searchInput} placeholder="Buscar por nome ou cidade..." placeholderTextColor={Colors.gray} value={busca} onChangeText={setBusca} />
       </View>
 
@@ -86,8 +88,16 @@ export default function BuscarLojasScreen() {
                     </View>
                     <View style={s.cardInfo}>
                       <Text style={s.nome}>{e.nome_empresa}</Text>
-                      <Text style={s.cidade}>📍 {e.cidade && e.estado ? `${e.cidade}, ${e.estado}` : 'Localização não informada'}</Text>
-                      {e.horario_funcionamento ? <Text style={s.horario}>🕐 {e.horario_funcionamento}</Text> : null}
+                      <View style={{flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3}}>
+                        <Icon name="map-pin" size={11} color={Colors.gray} />
+                        <Text style={s.cidade}>{e.cidade && e.estado ? `${e.cidade}, ${e.estado}` : 'Localização não informada'}</Text>
+                      </View>
+                      {e.horario_funcionamento ? (
+                        <View style={{flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2}}>
+                          <Icon name="clock" size={11} color={Colors.gray} />
+                          <Text style={s.horario}>{e.horario_funcionamento}</Text>
+                        </View>
+                      ) : null}
                     </View>
                   </View>
                   <TouchableOpacity
@@ -115,7 +125,7 @@ export default function BuscarLojasScreen() {
 const s = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.matriz},
   header: {padding: 24, paddingTop: 56, paddingBottom: 12},
-  backText: {color: Colors.pulso, fontSize: 14, fontWeight: '600', marginBottom: 12},
+  backText: {color: Colors.pulso, fontSize: 14, fontWeight: '600'},
   title: {fontSize: 24, fontWeight: '800', color: Colors.clareza},
   sub: {fontSize: 13, color: Colors.gray, marginTop: 4},
   searchBox: {flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 14, backgroundColor: '#162433', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 14},

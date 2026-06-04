@@ -1,20 +1,24 @@
 import React, {useState, useCallback} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Image, RefreshControl, ActivityIndicator} from 'react-native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, RefreshControl, ActivityIndicator, Pressable} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import Toast, {useToast} from '../../components/Toast';
 import {useAlert} from '../../components/CustomAlert';
 import {useAuth} from '../../context/AuthContext';
 import PhotoGallery from '../../components/PhotoGallery';
+import Icon from '../../components/Icon';
+import EmptyState from '../../components/EmptyState';
+import {SkeletonCard} from '../../components/Skeleton';
+import {hapticSuccess, hapticLight} from '../../utils/haptics';
 import {criarPedido, listarPedidosEmpresa, listarClientesEmpresa, listarDespachantes, listarExcursoes, PedidoData} from '../../services/api';
 import {formatHora} from '../../utils/date';
 
 type Status = 'aguardando' | 'em_transito' | 'entregue';
 
-const statusConfig: Record<Status, {label: string; cor: string}> = {
-  aguardando: {label: 'Aguardando', cor: '#F59E0B'},
-  em_transito: {label: 'Em trânsito', cor: Colors.pulso},
-  entregue: {label: 'Entregue', cor: '#86EFAC'},
+const statusConfig: Record<Status, {label: string; cor: string; icon: string}> = {
+  aguardando: {label: 'Aguardando', cor: '#F59E0B', icon: 'clock'},
+  em_transito: {label: 'Em trânsito', cor: Colors.pulso, icon: 'navigation'},
+  entregue: {label: 'Entregue', cor: '#86EFAC', icon: 'check-circle'},
 };
 
 const filtros: {label: string; value: Status | 'todos'}[] = [
@@ -23,6 +27,54 @@ const filtros: {label: string; value: Status | 'todos'}[] = [
   {label: 'Em trânsito', value: 'em_transito'},
   {label: 'Entregue', value: 'entregue'},
 ];
+
+type PickerItem = {key: string; label: string; data: any};
+
+function PickerModal({visible, title, items, onSelect, onClose, emptyText}: {
+  visible: boolean; title: string; items: PickerItem[]; onSelect: (item: PickerItem) => void; onClose: () => void; emptyText: string;
+}) {
+  const [search, setSearch] = useState('');
+  const filtered = items.filter(i => i.label.toLowerCase().includes(search.toLowerCase()));
+  return (
+    <Modal visible={visible} transparent animationType="slide">
+      <View style={pk.overlay}>
+        <View style={pk.container}>
+          <Text style={pk.title}>{title}</Text>
+          <View style={pk.searchBox}>
+            <Icon name="search" size={14} color={Colors.gray} />
+            <TextInput style={pk.searchInput} placeholder="Buscar..." placeholderTextColor={Colors.gray} value={search} onChangeText={setSearch} />
+          </View>
+          <ScrollView style={pk.list} showsVerticalScrollIndicator={false}>
+            {filtered.length === 0 ? (
+              <Text style={pk.empty}>{emptyText}</Text>
+            ) : filtered.map(item => (
+              <TouchableOpacity key={item.key} style={pk.item} onPress={() => { onSelect(item); setSearch(''); }}>
+                <Text style={pk.itemText}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <TouchableOpacity style={pk.closeBtn} onPress={() => { onClose(); setSearch(''); }}>
+            <Text style={pk.closeBtnText}>Fechar</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const pk = StyleSheet.create({
+  overlay:    {flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: 24},
+  container:  {backgroundColor: '#0F1F2E', borderRadius: 16, padding: 20, maxHeight: '70%'},
+  title:      {fontSize: 18, fontWeight: '700', color: Colors.clareza, marginBottom: 12},
+  searchBox:  {flexDirection: 'row', alignItems: 'center', backgroundColor: '#162433', borderRadius: 8, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 12, gap: 8, marginBottom: 12},
+  searchInput:{flex: 1, height: 40, color: Colors.clareza, fontSize: 14},
+  list:       {maxHeight: 250},
+  item:       {paddingVertical: 14, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#1E3448'},
+  itemText:   {fontSize: 15, color: Colors.clareza},
+  empty:      {padding: 20, color: Colors.gray, fontSize: 14, textAlign: 'center'},
+  closeBtn:   {height: 44, backgroundColor: '#162433', borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 12, borderWidth: 1, borderColor: '#1E3448'},
+  closeBtnText:{color: Colors.clareza, fontWeight: '600', fontSize: 14},
+});
 
 export default function PedidosScreen() {
   const {empresa} = useAuth();
@@ -36,7 +88,6 @@ export default function PedidosScreen() {
   const [modalNovo, setModalNovo] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Dados para o formulário de criar pedido
   const [clientes, setClientes] = useState<any[]>([]);
   const [despachantes, setDespachantes] = useState<any[]>([]);
   const [excursoes, setExcursoes] = useState<any[]>([]);
@@ -103,6 +154,7 @@ export default function PedidosScreen() {
     });
     setCriando(false);
     if (res.success) {
+      hapticSuccess();
       showToast('Pedido criado com sucesso!', 'success');
       setModalNovo(false);
       carregar();
@@ -118,28 +170,42 @@ export default function PedidosScreen() {
     return matchBusca && matchFiltro;
   });
 
-  if (loading) {
-    return <View style={[s.container, {justifyContent: 'center', alignItems: 'center'}]}><ActivityIndicator size="large" color={Colors.pulso} /></View>;
-  }
-
   return (
     <View style={s.container}>
       <Toast />
       <View style={s.header}>
-        <Text style={s.title}>Pedidos</Text>
-        <TouchableOpacity style={s.addBtn} onPress={abrirNovo}>
-          <Text style={s.addBtnText}>+ Novo</Text>
+        <Text style={s.title} accessibilityRole="header">Pedidos</Text>
+        <TouchableOpacity
+          style={s.addBtn}
+          onPress={abrirNovo}
+          accessibilityRole="button"
+          accessibilityLabel="Criar novo pedido">
+          <Icon name="plus" size={16} color={Colors.matriz} />
+          <Text style={s.addBtnText}>Novo</Text>
         </TouchableOpacity>
       </View>
 
       <View style={s.searchBox}>
-        <Text style={s.searchIcon}>🔍</Text>
-        <TextInput style={s.searchInput} placeholder="Buscar pedido..." placeholderTextColor={Colors.gray} value={busca} onChangeText={setBusca} />
+        <Icon name="search" size={16} color={Colors.gray} />
+        <TextInput
+          style={s.searchInput}
+          placeholder="Buscar pedido..."
+          placeholderTextColor={Colors.gray}
+          value={busca}
+          onChangeText={setBusca}
+          accessibilityLabel="Buscar pedido"
+        />
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filtrosScroll} contentContainerStyle={s.filtrosRow}>
         {filtros.map(f => (
-          <TouchableOpacity key={f.value} style={[s.filtroChip, filtro === f.value && s.filtroAtivo]} onPress={() => setFiltro(f.value)}>
+          <TouchableOpacity
+            key={f.value}
+            style={[s.filtroChip, filtro === f.value && s.filtroAtivo]}
+            onPress={() => { hapticLight(); setFiltro(f.value); }}
+            accessibilityRole="button"
+            accessibilityState={{selected: filtro === f.value}}
+            accessibilityLabel={`Filtrar por ${f.label}`}>
             <Text style={[s.filtroText, filtro === f.value && s.filtroTextAtivo]}>{f.label}</Text>
           </TouchableOpacity>
         ))}
@@ -150,21 +216,37 @@ export default function PedidosScreen() {
         contentContainerStyle={{padding: 24, paddingTop: 0, gap: 10}}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.pulso} />}
       >
-        {pedidosFiltrados.length === 0 && <Text style={s.empty}>Nenhum pedido encontrado</Text>}
-        {pedidosFiltrados.map(p => {
+        {loading ? (
+          <><SkeletonCard /><SkeletonCard /><SkeletonCard /></>
+        ) : pedidosFiltrados.length === 0 ? (
+          <EmptyState icon="package" title="Nenhum pedido encontrado" subtitle="Crie um novo pedido ou ajuste os filtros" />
+        ) : pedidosFiltrados.map(p => {
           const cfg = statusConfig[p.status];
           const etapas = p.etapas || [];
           const progresso = etapas.filter(e => e.concluida).length;
           return (
-            <TouchableOpacity key={p.id} style={s.card} onPress={() => setDetalhe(p)} activeOpacity={0.7}>
+            <TouchableOpacity
+              key={p.id}
+              style={s.card}
+              onPress={() => setDetalhe(p)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`Pedido ${p.numero}, ${p.cliente_nome}, ${cfg.label}`}>
               <View style={s.cardHeader}>
                 <Text style={s.pedidoId}>#{p.numero}</Text>
                 <View style={[s.badge, {backgroundColor: cfg.cor + '20'}]}>
+                  <Icon name={cfg.icon} size={12} color={cfg.cor} />
                   <Text style={[s.badgeText, {color: cfg.cor}]}>{cfg.label}</Text>
                 </View>
               </View>
-              <Text style={s.cardCliente}>👤 {p.cliente_nome}</Text>
-              <Text style={s.cardDesp}>🚚 {p.despachante_nome} · {p.volumes} vol.</Text>
+              <View style={s.cardRow}>
+                <Icon name="user" size={13} color={Colors.clareza} />
+                <Text style={s.cardCliente}>{p.cliente_nome}</Text>
+              </View>
+              <View style={s.cardRow}>
+                <Icon name="truck" size={13} color={Colors.gray} />
+                <Text style={s.cardDesp}>{p.despachante_nome} · {p.volumes} vol.</Text>
+              </View>
               <View style={s.progressRow}>
                 <View style={s.progressBg}>
                   <View style={[s.progressFill, {width: `${(progresso / Math.max(etapas.length, 1)) * 100}%`, backgroundColor: cfg.cor}]} />
@@ -176,10 +258,9 @@ export default function PedidosScreen() {
         })}
       </ScrollView>
 
-      {/* Modal detalhe */}
       <Modal visible={!!detalhe} transparent animationType="slide">
-        <View style={s.overlay}>
-          <View style={s.sheet}>
+        <Pressable style={s.overlay} onPress={() => setDetalhe(null)}>
+          <Pressable style={s.sheet} onPress={() => {}}>
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={s.sheetHeader}>
                 <Text style={s.sheetTitle}>#{detalhe?.numero}</Text>
@@ -200,10 +281,8 @@ export default function PedidosScreen() {
                 <View key={etapa.id} style={s.etapaRow}>
                   <View style={[s.etapaDot, etapa.concluida && s.etapaDotDone]} />
                   {i < (detalhe.etapas?.length ?? 0) - 1 && <View style={[s.etapaLine, etapa.concluida && s.etapaLineDone]} />}
-                  <View style={s.etapaInfo}>
-                    <Text style={[s.etapaNome, etapa.concluida && s.etapaNomeDone]}>{etapa.nome}</Text>
-                    {etapa.hora && <Text style={s.etapaHora}>{formatHora(etapa.hora)}</Text>}
-                  </View>
+                  {etapa.hora && <Text style={s.etapaHora}>{formatHora(etapa.hora)}</Text>}
+                  <Text style={[s.etapaNome, etapa.concluida && s.etapaNomeDone]}>{etapa.nome}</Text>
                 </View>
               ))}
 
@@ -221,85 +300,86 @@ export default function PedidosScreen() {
                 </>
               ) : null}
 
-              <TouchableOpacity style={s.closeBtn} onPress={() => setDetalhe(null)}>
+              <TouchableOpacity
+                style={s.closeBtn}
+                onPress={() => setDetalhe(null)}
+                accessibilityRole="button"
+                accessibilityLabel="Fechar detalhes">
                 <Text style={s.closeBtnText}>Fechar</Text>
               </TouchableOpacity>
             </ScrollView>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
-      {/* Modal criar pedido */}
       <Modal visible={modalNovo} transparent animationType="slide">
-        <View style={s.overlay}>
-          <View style={s.sheet}>
+        <Pressable style={s.overlay} onPress={() => setModalNovo(false)}>
+          <Pressable style={s.sheet} onPress={() => {}}>
             <ScrollView showsVerticalScrollIndicator={false}>
               <Text style={s.sheetTitle}>Novo Pedido</Text>
 
               <Text style={s.label}>Cliente *</Text>
-              <TouchableOpacity style={s.selectBtn} onPress={() => setShowPickerCliente(!showPickerCliente)}>
+              <TouchableOpacity style={s.selectBtn} onPress={() => setShowPickerCliente(true)} accessibilityRole="button">
                 <Text style={novoCliente ? s.selectValue : s.selectPlaceholder}>{novoCliente?.nome || 'Selecionar cliente...'}</Text>
-                <Text style={s.selectArrow}>▼</Text>
+                <Icon name="chevron-down" size={16} color={Colors.gray} />
               </TouchableOpacity>
-              {showPickerCliente && (
-                <View style={s.pickerList}>
-                  {clientes.map(c => (
-                    <TouchableOpacity key={c.vinculo_id} style={s.pickerItem} onPress={() => { setNovoCliente(c); setShowPickerCliente(false); }}>
-                      <Text style={s.pickerItemText}>{c.nome}</Text>
-                    </TouchableOpacity>
-                  ))}
-                  {clientes.length === 0 && <Text style={s.pickerEmpty}>Nenhum cliente vinculado</Text>}
-                </View>
-              )}
 
               <Text style={s.label}>Despachante *</Text>
-              <TouchableOpacity style={s.selectBtn} onPress={() => setShowPickerDesp(!showPickerDesp)}>
+              <TouchableOpacity style={s.selectBtn} onPress={() => setShowPickerDesp(true)} accessibilityRole="button">
                 <Text style={novoDespachante ? s.selectValue : s.selectPlaceholder}>{novoDespachante?.nome || 'Selecionar despachante...'}</Text>
-                <Text style={s.selectArrow}>▼</Text>
+                <Icon name="chevron-down" size={16} color={Colors.gray} />
               </TouchableOpacity>
-              {showPickerDesp && (
-                <View style={s.pickerList}>
-                  {despachantes.map(d => (
-                    <TouchableOpacity key={d.id} style={s.pickerItem} onPress={() => { setNovoDespachante(d); setShowPickerDesp(false); }}>
-                      <Text style={s.pickerItemText}>{d.nome}</Text>
-                    </TouchableOpacity>
-                  ))}
-                  {despachantes.length === 0 && <Text style={s.pickerEmpty}>Nenhum despachante cadastrado</Text>}
-                </View>
-              )}
 
               <Text style={s.label}>Excursão de destino *</Text>
-              <TouchableOpacity style={s.selectBtn} onPress={() => setShowPickerExc(!showPickerExc)}>
+              <TouchableOpacity style={s.selectBtn} onPress={() => setShowPickerExc(true)} accessibilityRole="button">
                 <Text style={novoExcursao ? s.selectValue : s.selectPlaceholder}>{novoExcursao ? `${novoExcursao.nome} (Setor ${novoExcursao.setor}, Vaga ${novoExcursao.vaga})` : 'Selecionar excursão...'}</Text>
-                <Text style={s.selectArrow}>▼</Text>
+                <Icon name="chevron-down" size={16} color={Colors.gray} />
               </TouchableOpacity>
-              {showPickerExc && (
-                <View style={s.pickerList}>
-                  {excursoes.map(e => (
-                    <TouchableOpacity key={e.id} style={s.pickerItem} onPress={() => { setNovoExcursao(e); setShowPickerExc(false); }}>
-                      <Text style={s.pickerItemText}>{e.nome} (Setor {e.setor}, Vaga {e.vaga})</Text>
-                    </TouchableOpacity>
-                  ))}
-                  {excursoes.length === 0 && <Text style={s.pickerEmpty}>Nenhuma excursão cadastrada</Text>}
-                </View>
-              )}
 
               <Text style={s.label}>Quantidade de volumes *</Text>
-              <TextInput style={s.input} placeholder="Ex: 3" placeholderTextColor={Colors.gray} value={novoVolumes} onChangeText={setNovoVolumes} keyboardType="numeric" />
+              <TextInput style={s.input} placeholder="Ex: 3" placeholderTextColor={Colors.gray} value={novoVolumes} onChangeText={setNovoVolumes} keyboardType="numeric" accessibilityLabel="Quantidade de volumes" />
 
               <Text style={s.label}>Descrição</Text>
-              <TextInput style={[s.input, {height: 70, textAlignVertical: 'top', paddingTop: 12}]} placeholder="Descreva os itens..." placeholderTextColor={Colors.gray} value={novoDescricao} onChangeText={setNovoDescricao} multiline />
+              <TextInput style={[s.input, {height: 70, textAlignVertical: 'top', paddingTop: 12}]} placeholder="Descreva os itens..." placeholderTextColor={Colors.gray} value={novoDescricao} onChangeText={setNovoDescricao} multiline accessibilityLabel="Descrição do pedido" />
 
-              <TouchableOpacity style={s.saveBtn} onPress={handleCriar} disabled={criando}>
-                <Text style={s.saveBtnText}>{criando ? 'Criando...' : 'Criar Pedido'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setModalNovo(false)}>
-                <Text style={s.cancel}>Cancelar</Text>
-              </TouchableOpacity>
+              <View style={s.btnRow}>
+                <TouchableOpacity style={s.cancelBtn} onPress={() => setModalNovo(false)} accessibilityRole="button" accessibilityLabel="Cancelar">
+                  <Text style={s.cancelBtnText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.saveBtn} onPress={handleCriar} disabled={criando} accessibilityRole="button" accessibilityLabel="Criar pedido">
+                  <Text style={s.saveBtnText}>{criando ? 'Criando...' : 'Criar Pedido'}</Text>
+                </TouchableOpacity>
+              </View>
             </ScrollView>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
+
+      {/* Picker modals */}
+      <PickerModal
+        visible={showPickerCliente}
+        title="Selecionar Cliente"
+        items={clientes.map(c => ({key: c.vinculo_id, label: c.nome, data: c}))}
+        onSelect={(item) => { setNovoCliente(item.data); setShowPickerCliente(false); }}
+        onClose={() => setShowPickerCliente(false)}
+        emptyText="Nenhum cliente vinculado"
+      />
+      <PickerModal
+        visible={showPickerDesp}
+        title="Selecionar Despachante"
+        items={despachantes.map(d => ({key: d.id, label: d.nome, data: d}))}
+        onSelect={(item) => { setNovoDespachante(item.data); setShowPickerDesp(false); }}
+        onClose={() => setShowPickerDesp(false)}
+        emptyText="Nenhum despachante cadastrado"
+      />
+      <PickerModal
+        visible={showPickerExc}
+        title="Selecionar Excursão"
+        items={excursoes.map(e => ({key: e.id, label: `${e.nome} (Setor ${e.setor}, Vaga ${e.vaga})`, data: e}))}
+        onSelect={(item) => { setNovoExcursao(item.data); setShowPickerExc(false); }}
+        onClose={() => setShowPickerExc(false)}
+        emptyText="Nenhuma excursão cadastrada"
+      />
     </View>
   );
 }
@@ -308,10 +388,9 @@ const s = StyleSheet.create({
   container:    {flex: 1, backgroundColor: Colors.matriz},
   header:       {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 24, paddingTop: 56, paddingBottom: 12},
   title:        {fontSize: 22, fontWeight: '700', color: Colors.clareza},
-  addBtn:       {backgroundColor: Colors.pulso, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8},
+  addBtn:       {backgroundColor: Colors.pulso, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6},
   addBtnText:   {color: Colors.matriz, fontWeight: '700', fontSize: 14},
-  searchBox:    {flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 10, backgroundColor: '#162433', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 14},
-  searchIcon:   {fontSize: 16, marginRight: 8},
+  searchBox:    {flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 10, backgroundColor: '#162433', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 14, gap: 8},
   searchInput:  {flex: 1, height: 44, color: Colors.clareza, fontSize: 15},
   filtrosScroll:{maxHeight: 44, marginBottom: 10},
   filtrosRow:   {paddingHorizontal: 24, gap: 8, justifyContent: 'center', flexGrow: 1, alignItems: 'center'},
@@ -319,15 +398,15 @@ const s = StyleSheet.create({
   filtroAtivo:  {backgroundColor: Colors.pulso + '20', borderColor: Colors.pulso},
   filtroText:   {fontSize: 13, color: Colors.gray, fontWeight: '600'},
   filtroTextAtivo:{color: Colors.pulso},
-  empty:        {textAlign: 'center', color: Colors.gray, marginTop: 40, fontSize: 15},
   card:         {backgroundColor: '#162433', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#1E3448'},
   cardHeader:   {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10},
   pedidoId:     {fontSize: 16, fontWeight: '700', color: Colors.clareza},
-  badge:        {borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4},
+  badge:        {borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4},
   badgeText:    {fontSize: 12, fontWeight: '700'},
-  cardCliente:  {fontSize: 13, color: Colors.clareza, marginBottom: 4},
-  cardDesp:     {fontSize: 13, color: Colors.gray, marginBottom: 10},
-  progressRow:  {flexDirection: 'row', alignItems: 'center', gap: 10},
+  cardRow:      {flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4},
+  cardCliente:  {fontSize: 13, color: Colors.clareza},
+  cardDesp:     {fontSize: 13, color: Colors.gray},
+  progressRow:  {flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8},
   progressBg:   {flex: 1, height: 6, backgroundColor: '#1E3448', borderRadius: 3, overflow: 'hidden'},
   progressFill: {height: 6, borderRadius: 3},
   progressLabel:{fontSize: 12, color: Colors.gray, fontWeight: '600'},
@@ -339,31 +418,25 @@ const s = StyleSheet.create({
   detLabel:     {fontSize: 13, color: Colors.gray},
   detValue:     {fontSize: 13, fontWeight: '600', color: Colors.clareza, flex: 1, textAlign: 'right'},
   sectionTitle: {fontSize: 14, fontWeight: '700', color: Colors.pulso, marginTop: 20, marginBottom: 12},
-  etapaRow:     {flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20, position: 'relative'},
-  etapaDot:     {width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#1E3448', backgroundColor: '#0F1F2E', marginRight: 12, marginTop: 2},
+  etapaRow:     {flexDirection: 'row', alignItems: 'center', marginBottom: 16, position: 'relative'},
+  etapaDot:     {width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#1E3448', backgroundColor: '#0F1F2E', marginRight: 10},
   etapaDotDone: {backgroundColor: Colors.pulso, borderColor: Colors.pulso},
-  etapaLine:    {position: 'absolute', left: 6, top: 16, width: 2, height: 24, backgroundColor: '#1E3448'},
+  etapaLine:    {position: 'absolute', left: 6, top: 16, width: 2, height: 20, backgroundColor: '#1E3448'},
   etapaLineDone:{backgroundColor: Colors.pulso},
-  etapaInfo:    {flex: 1},
   etapaNome:    {fontSize: 14, color: Colors.gray},
   etapaNomeDone:{color: Colors.clareza, fontWeight: '600'},
-  etapaHora:    {fontSize: 12, color: Colors.gray, marginTop: 2},
+  etapaHora:    {fontSize: 12, color: Colors.gray, marginRight: 10, minWidth: 45},
   closeBtn:     {height: 52, backgroundColor: '#162433', borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 24, borderWidth: 1, borderColor: '#1E3448'},
   closeBtnText: {color: Colors.clareza, fontWeight: '600', fontSize: 15},
-  fotosRow:     {flexDirection: 'row', flexWrap: 'wrap', gap: 10},
-  foto:         {width: 100, height: 100, borderRadius: 10},
   obsText:      {fontSize: 14, color: Colors.clareza, lineHeight: 20},
   label:        {fontSize: 13, fontWeight: '600', color: Colors.gray, marginBottom: 6, marginTop: 12},
   input:        {height: 50, backgroundColor: '#162433', borderRadius: 8, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 16, color: Colors.clareza, fontSize: 15},
   selectBtn:    {height: 50, backgroundColor: '#162433', borderRadius: 8, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
   selectValue:  {fontSize: 15, color: Colors.clareza, flex: 1},
   selectPlaceholder:{fontSize: 15, color: Colors.gray},
-  selectArrow:  {fontSize: 12, color: Colors.gray},
-  pickerList:   {backgroundColor: '#1E3448', borderRadius: 8, marginTop: 4, overflow: 'hidden', maxHeight: 150},
-  pickerItem:   {paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#0F1F2E'},
-  pickerItemText:{fontSize: 14, color: Colors.clareza},
-  pickerEmpty:  {padding: 16, color: Colors.gray, fontSize: 13, textAlign: 'center'},
-  saveBtn:      {height: 52, backgroundColor: Colors.pulso, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 24},
+  saveBtn:      {flex: 1, height: 52, backgroundColor: Colors.pulso, borderRadius: 8, alignItems: 'center', justifyContent: 'center'},
   saveBtnText:  {color: Colors.matriz, fontWeight: '700', fontSize: 16},
-  cancel:       {textAlign: 'center', color: Colors.gray, marginTop: 16, fontSize: 14},
+  btnRow:       {flexDirection: 'row', gap: 12, marginTop: 24},
+  cancelBtn:    {flex: 1, height: 52, backgroundColor: '#162433', borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#EF4444'},
+  cancelBtnText:{color: '#EF4444', fontWeight: '700', fontSize: 16},
 });

@@ -3,6 +3,7 @@ import {View, Text, TouchableOpacity, StyleSheet, SafeAreaView} from 'react-nati
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
+import Icon from '../../components/Icon';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'RoleSelect'>;
@@ -13,19 +14,19 @@ const roles = [
     key: 'Empresa',
     label: 'Empresa',
     description: 'Gestão completa de clientes, despachantes e excursões',
-    icon: '🏢',
+    icon: 'briefcase',
   },
   {
     key: 'Cliente',
     label: 'Cliente',
     description: 'Acompanhamento de pedidos em tempo real',
-    icon: '📦',
+    icon: 'package',
   },
   {
     key: 'Despachante',
     label: 'Despachante',
     description: 'Expedição e entrega de mercadorias',
-    icon: '🚚',
+    icon: 'truck',
   },
 ] as const;
 
@@ -45,7 +46,7 @@ export default function RoleSelectScreen({navigation}: Props) {
               style={styles.card}
               activeOpacity={0.8}
               onPress={() => navigation.replace(role.key as any)}>
-              <Text style={styles.icon}>{role.icon}</Text>
+              <Icon name={role.icon} size={24} color={Colors.pulso} />
               <View style={styles.cardText}>
                 <Text style={styles.cardLabel}>{role.label}</Text>
                 <Text style={styles.cardDesc}>{role.description}</Text>

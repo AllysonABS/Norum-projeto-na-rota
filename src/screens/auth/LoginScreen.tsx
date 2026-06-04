@@ -12,12 +12,14 @@ import {
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
 import {loginUnificado} from '../../services/api';
 import {useAuth} from '../../context/AuthContext';
 import {useAlert} from '../../components/CustomAlert';
+import Icon from '../../components/Icon';
+import {saveCredentials, getCredentials, clearCredentials} from '../../utils/secureStorage';
+import {hapticSuccess, hapticError} from '../../utils/haptics';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Login'>;
@@ -25,7 +27,7 @@ type Props = {
 
 function LogoMark() {
   return (
-    <View style={logo.circle}>
+    <View style={logo.circle} accessibilityLabel="Logo Na Rota">
       <View style={logo.card}>
         <View style={logo.stripe} />
       </View>
@@ -77,8 +79,6 @@ function maskCpfCnpj(value: string): string {
     .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
 }
 
-const STORAGE_KEY = '@narota_credentials';
-
 export default function LoginScreen({navigation}: Props) {
   const [cpfCnpj, setCpfCnpj] = useState('');
   const [password, setPassword] = useState('');
@@ -89,11 +89,10 @@ export default function LoginScreen({navigation}: Props) {
   const {show} = useAlert();
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then(data => {
-      if (data) {
-        const {cpfCnpj: saved, password: savedPwd} = JSON.parse(data);
-        setCpfCnpj(saved);
-        setPassword(savedPwd);
+    getCredentials().then(creds => {
+      if (creds) {
+        setCpfCnpj(creds.username);
+        setPassword(creds.password);
         setLembrar(true);
       }
     });
@@ -111,24 +110,29 @@ export default function LoginScreen({navigation}: Props) {
       const res = await loginUnificado(doc, password);
 
       if (lembrar) {
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({cpfCnpj, password}));
+        await saveCredentials(cpfCnpj, password);
       } else {
-        await AsyncStorage.removeItem(STORAGE_KEY);
+        await clearCredentials();
       }
 
       if (res.success && res.tipo === 'empresa' && res.empresa) {
+        hapticSuccess();
         setEmpresa(res.empresa);
         navigation.replace('Empresa');
       } else if (res.success && res.tipo === 'despachante' && res.despachante) {
+        hapticSuccess();
         setDespachante(res.despachante);
         navigation.replace('Despachante');
       } else if (res.success && res.tipo === 'cliente' && res.cliente) {
+        hapticSuccess();
         setCliente(res.cliente);
         navigation.replace('Cliente');
       } else {
+        hapticError();
         show({title: 'Erro', message: res.error || 'Credenciais inválidas.', type: 'error'});
       }
     } catch {
+      hapticError();
       show({title: 'Erro', message: 'Falha na conexão com o servidor.', type: 'error'});
     } finally {
       setLoading(false);
@@ -161,6 +165,8 @@ export default function LoginScreen({navigation}: Props) {
               onChangeText={v => setCpfCnpj(maskCpfCnpj(v))}
               keyboardType="numeric"
               autoCorrect={false}
+              accessibilityLabel="Campo de CPF ou CNPJ"
+              accessibilityHint="Digite seu CPF ou CNPJ para login"
             />
           </View>
 
@@ -174,21 +180,34 @@ export default function LoginScreen({navigation}: Props) {
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
+                accessibilityLabel="Campo de senha"
               />
-              <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)}>
-                <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
+              <TouchableOpacity
+                style={styles.eyeBtn}
+                onPress={() => setShowPassword(!showPassword)}
+                accessibilityLabel={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                accessibilityRole="button">
+                <Icon name={showPassword ? 'eye-off' : 'eye'} size={20} color={Colors.gray} />
               </TouchableOpacity>
             </View>
           </View>
 
           <View style={styles.optionsRow}>
-            <TouchableOpacity style={styles.lembrarRow} onPress={() => setLembrar(!lembrar)}>
+            <TouchableOpacity
+              style={styles.lembrarRow}
+              onPress={() => setLembrar(!lembrar)}
+              accessibilityRole="checkbox"
+              accessibilityState={{checked: lembrar}}
+              accessibilityLabel="Lembrar credenciais">
               <View style={[styles.checkbox, lembrar && styles.checkboxOn]}>
-                {lembrar && <Text style={styles.checkmark}>✓</Text>}
+                {lembrar && <Icon name="check" size={14} color={Colors.matriz} />}
               </View>
               <Text style={styles.lembrarText}>Lembrar-se</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigation.navigate('EsqueceuSenha')}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('EsqueceuSenha')}
+              accessibilityRole="link"
+              accessibilityLabel="Esqueceu a senha">
               <Text style={styles.forgotText}>Esqueceu a senha?</Text>
             </TouchableOpacity>
           </View>
@@ -197,7 +216,10 @@ export default function LoginScreen({navigation}: Props) {
             style={[styles.loginButton, loading && styles.loginButtonDisabled]}
             onPress={handleLogin}
             disabled={loading}
-            activeOpacity={0.85}>
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Entrar"
+            accessibilityState={{disabled: loading}}>
             {loading ? (
               <ActivityIndicator color={Colors.matriz} />
             ) : (
@@ -208,7 +230,10 @@ export default function LoginScreen({navigation}: Props) {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Não tem uma conta? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('CadastroCliente')}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('CadastroCliente')}
+            accessibilityRole="link"
+            accessibilityLabel="Ir para cadastro">
             <Text style={styles.footerLink}>Cadastre-se</Text>
           </TouchableOpacity>
         </View>
@@ -275,7 +300,6 @@ const styles = StyleSheet.create({
     color: Colors.matriz,
   },
   eyeBtn: {paddingHorizontal: 14},
-  eyeIcon: {fontSize: 18},
   optionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -294,7 +318,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkboxOn: {backgroundColor: Colors.pulso, borderColor: Colors.pulso},
-  checkmark: {color: Colors.white, fontSize: 12, fontWeight: '800'},
   lembrarText: {fontSize: 13, color: Colors.matriz, fontWeight: '500'},
   forgotText: {fontSize: 13, color: Colors.pulso, fontWeight: '600'},
   loginButton: {

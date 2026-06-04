@@ -1,5 +1,5 @@
 import React, {useState, useCallback} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput} from 'react-native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Pressable} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {useFocusEffect} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -10,6 +10,8 @@ import {useAuth} from '../../context/AuthContext';
 import {atualizarCliente, listarMinhasLojas, alterarSenhaCliente, listarPedidosCliente} from '../../services/api';
 import {useAlert} from '../../components/CustomAlert';
 import {formatDataMesAno} from '../../utils/date';
+import Icon from '../../components/Icon';
+import {useLogout} from '../../hooks/useLogout';
 
 function maskCpf(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 11);
@@ -42,6 +44,7 @@ export default function PerfilScreen() {
   const {showToast} = useToast();
   const {cliente, setCliente} = useAuth();
   const {show} = useAlert();
+  const logout = useLogout();
   const [modalEditar, setModalEditar] = useState(false);
   const [modalSenha, setModalSenha] = useState(false);
   const [totalLojas, setTotalLojas] = useState(0);
@@ -191,7 +194,7 @@ export default function PerfilScreen() {
           <View style={s.sectionHeader}>
             <Text style={s.sectionTitle}>Dados Pessoais</Text>
             <TouchableOpacity onPress={abrirEditar}>
-              <Text style={s.editBtn}>✏️ Editar</Text>
+              <Text style={s.editBtn}>Editar</Text>
             </TouchableOpacity>
           </View>
           <View style={s.row}><Text style={s.rowLabel}>Telefone</Text><Text style={s.rowValue}>{telefone ? maskTelefone(telefone) : '—'}</Text></View>
@@ -216,15 +219,15 @@ export default function PerfilScreen() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={s.exitBtn} onPress={() => { setCliente(null); navigation.replace('Login'); }}>
+        <TouchableOpacity style={s.exitBtn} onPress={logout}>
           <Text style={s.exitText}>Sair da conta</Text>
         </TouchableOpacity>
       </ScrollView>
 
       {/* Modal editar */}
       <Modal visible={modalEditar} transparent animationType="slide">
-        <View style={s.overlay}>
-          <View style={s.sheet}>
+        <Pressable style={s.overlay} onPress={() => setModalEditar(false)}>
+          <Pressable style={s.sheet} onPress={() => {}}>
             <ScrollView showsVerticalScrollIndicator={false}>
               <Text style={s.sheetTitle}>Editar Perfil</Text>
 
@@ -265,21 +268,23 @@ export default function PerfilScreen() {
                 </View>
               </View>
 
-              <TouchableOpacity style={s.saveBtn} onPress={salvar}>
-                <Text style={s.saveBtnText}>Salvar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setModalEditar(false)}>
-                <Text style={s.cancel}>Cancelar</Text>
-              </TouchableOpacity>
+              <View style={s.btnRow}>
+                <TouchableOpacity style={s.cancelBtn} onPress={() => setModalEditar(false)}>
+                  <Text style={s.cancelBtnText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.saveBtn} onPress={salvar}>
+                  <Text style={s.saveBtnText}>Salvar</Text>
+                </TouchableOpacity>
+              </View>
             </ScrollView>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       {/* Modal alterar senha */}
       <Modal visible={modalSenha} transparent animationType="slide">
-        <View style={s.overlay}>
-          <View style={s.sheet}>
+        <Pressable style={s.overlay} onPress={() => { setModalSenha(false); setSenhaAtual(''); setNovaSenha(''); setConfirmarNovaSenha(''); }}>
+          <Pressable style={s.sheet} onPress={() => {}}>
             <Text style={s.sheetTitle}>Alterar Senha</Text>
 
             <Text style={s.label}>Senha atual</Text>
@@ -289,14 +294,16 @@ export default function PerfilScreen() {
             <Text style={s.label}>Confirmar nova senha</Text>
             <TextInput style={s.input} value={confirmarNovaSenha} onChangeText={setConfirmarNovaSenha} placeholderTextColor={Colors.gray} placeholder="Repita a nova senha" secureTextEntry />
 
-            <TouchableOpacity style={s.saveBtn} onPress={salvarSenha} disabled={salvandoSenha}>
-              <Text style={s.saveBtnText}>{salvandoSenha ? 'Salvando...' : 'Alterar Senha'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => { setModalSenha(false); setSenhaAtual(''); setNovaSenha(''); setConfirmarNovaSenha(''); }}>
-              <Text style={s.cancel}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+            <View style={s.btnRow}>
+              <TouchableOpacity style={s.cancelBtn} onPress={() => { setModalSenha(false); setSenhaAtual(''); setNovaSenha(''); setConfirmarNovaSenha(''); }}>
+                <Text style={s.cancelBtnText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.saveBtn} onPress={salvarSenha} disabled={salvandoSenha}>
+                <Text style={s.saveBtnText}>{salvandoSenha ? 'Salvando...' : 'Alterar Senha'}</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -336,7 +343,10 @@ const s = StyleSheet.create({
   labelSection:{fontSize: 15, fontWeight: '700', color: Colors.pulso, marginTop: 20, marginBottom: 4},
   input:      {height: 48, backgroundColor: '#162433', borderRadius: 8, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 14, color: Colors.clareza, fontSize: 15},
   formRow:    {flexDirection: 'row'},
-  saveBtn:    {height: 52, backgroundColor: Colors.pulso, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 24},
+  saveBtn:    {flex: 1, height: 52, backgroundColor: Colors.pulso, borderRadius: 8, alignItems: 'center', justifyContent: 'center'},
   saveBtnText:{color: Colors.matriz, fontWeight: '700', fontSize: 16},
+  btnRow:     {flexDirection: 'row', gap: 12, marginTop: 24},
+  cancelBtn:  {flex: 1, height: 52, backgroundColor: '#162433', borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#EF4444'},
+  cancelBtnText:{color: '#EF4444', fontWeight: '700', fontSize: 16},
   cancel:     {textAlign: 'center', color: Colors.gray, marginTop: 16, fontSize: 14},
 });

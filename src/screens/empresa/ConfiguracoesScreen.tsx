@@ -6,6 +6,8 @@ import Toast, {useToast} from '../../components/Toast';
 import {useAuth} from '../../context/AuthContext';
 import {buscarEmpresa, atualizarEmpresa} from '../../services/api';
 import {useAlert} from '../../components/CustomAlert';
+import Icon from '../../components/Icon';
+import {hapticSuccess} from '../../utils/haptics';
 
 function maskCnpj(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 14);
@@ -70,6 +72,7 @@ export default function ConfiguracoesScreen() {
     setSalvando(false);
 
     if (res.success) {
+      hapticSuccess();
       setEmpresa({...empresa, nome_empresa: nomeEmpresa, telefone, email, endereco, cidade, estado, cep, horario_funcionamento: horario});
       showToast('Configurações salvas!', 'success');
     } else {
@@ -89,10 +92,11 @@ export default function ConfiguracoesScreen() {
     <View style={s.container}>
       <Toast />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.content}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={s.backText}>← Voltar</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12}} accessibilityRole="button" accessibilityLabel="Voltar">
+          <Icon name="arrow-left" size={18} color={Colors.pulso} />
+          <Text style={s.backText}>Voltar</Text>
         </TouchableOpacity>
-        <Text style={s.title}>Configurações</Text>
+        <Text style={s.title} accessibilityRole="header">Configurações</Text>
 
         <View style={s.section}>
           <Text style={s.sectionTitle}>Dados da Empresa</Text>
@@ -146,7 +150,7 @@ export default function ConfiguracoesScreen() {
 
 const s = StyleSheet.create({
   container:    {flex: 1, backgroundColor: Colors.matriz},
-  content:      {padding: 24, paddingTop: 56, paddingBottom: 40},
+  content:      {padding: 24, paddingTop: 56, paddingBottom: 100},
   title:        {fontSize: 18, fontWeight: '700', color: Colors.clareza, marginBottom: 24},
   backText:     {color: Colors.pulso, fontSize: 14, fontWeight: '600', marginBottom: 12},
   section:      {backgroundColor: '#162433', borderRadius: 12, padding: 20, borderWidth: 1, borderColor: '#1E3448', marginBottom: 20},

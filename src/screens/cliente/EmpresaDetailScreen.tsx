@@ -7,6 +7,7 @@ import {useAuth} from '../../context/AuthContext';
 import {desvincularLoja, listarPedidosCliente, PedidoData} from '../../services/api';
 import PhotoGallery from '../../components/PhotoGallery';
 import {formatHora, formatData} from '../../utils/date';
+import Icon from '../../components/Icon';
 
 export default function EmpresaDetailScreen({route, navigation}: any) {
   const {empresa} = route.params;
@@ -63,7 +64,7 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={s.topBar}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-            <Text style={s.backText}>←</Text>
+            <Icon name="arrow-left" size={22} color={Colors.clareza} />
           </TouchableOpacity>
         </View>
 
@@ -180,8 +181,10 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
                   {i < (selecionado.etapas?.length ?? 0) - 1 && <View style={s.timelineBar} />}
                 </View>
                 <View style={s.timelineText}>
-                  {t.hora && <Text style={s.timelineHora}>{formatHora(t.hora)}</Text>}
-                  <Text style={s.timelineEvento}>{t.nome}</Text>
+                  <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+                    {t.hora && <Text style={s.timelineHora}>{formatHora(t.hora)}</Text>}
+                    <Text style={s.timelineEvento}>{t.nome}</Text>
+                  </View>
                 </View>
               </View>
             ))}
@@ -205,9 +208,8 @@ export default function EmpresaDetailScreen({route, navigation}: any) {
 
 const s = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.matriz},
-  topBar: {paddingHorizontal: 20, paddingTop: 56},
-  backBtn: {width: 40, height: 40, borderRadius: 12, backgroundColor: '#162433', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#1E3448'},
-  backText: {fontSize: 20, color: Colors.clareza},
+  topBar: {paddingHorizontal: 20, paddingTop: 60},
+  backBtn: {width: 48, height: 48, borderRadius: 14, backgroundColor: '#162433', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#1E3448'},
   hero: {alignItems: 'center', paddingTop: 20, paddingBottom: 20},
   avatar: {width: 80, height: 80, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 16},
   avatarText: {fontSize: 36, fontWeight: '800'},
@@ -248,7 +250,7 @@ const s = StyleSheet.create({
   timelineDot: {width: 10, height: 10, borderRadius: 5, backgroundColor: '#1E3448', marginTop: 3},
   timelineBar: {width: 2, flex: 1, backgroundColor: '#1E3448', marginTop: 4},
   timelineText: {flex: 1, paddingBottom: 16},
-  timelineHora: {fontSize: 12, color: Colors.gray, marginBottom: 2},
+  timelineHora: {fontSize: 12, color: Colors.gray, minWidth: 45},
   timelineEvento: {fontSize: 14, color: Colors.clareza, fontWeight: '500'},
   closeBtn: {height: 52, backgroundColor: '#162433', borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 12, borderWidth: 1, borderColor: '#1E3448'},
   closeBtnText: {color: Colors.clareza, fontWeight: '600', fontSize: 15},

@@ -3,14 +3,18 @@ import {View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Refresh
 import {useNavigation, useFocusEffect} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {DespachanteStackParamList} from '../../navigation/DespachanteNavigator';
-import {RootStackParamList} from '../../navigation/AppNavigator';
 import {Colors} from '../../theme/colors';
 import {useAuth} from '../../context/AuthContext';
 import {listarPedidosDespachante, PedidoData} from '../../services/api';
+import Icon from '../../components/Icon';
+import EmptyState from '../../components/EmptyState';
+import {SkeletonCard} from '../../components/Skeleton';
+import {useLogout} from '../../hooks/useLogout';
+import {hapticLight} from '../../utils/haptics';
 
 export default function FilaScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<DespachanteStackParamList>>();
-  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const logout = useLogout();
   const {despachante} = useAuth();
   const [pedidos, setPedidos] = useState<PedidoData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +41,7 @@ export default function FilaScreen() {
   const emAndamento = pedidos.filter(p => p.status === 'em_transito');
 
   const iniciarColeta = (p: PedidoData) => {
+    hapticLight();
     navigation.navigate('Checklist', {pedidoId: p.id, etapa: 'coleta'});
   };
 
@@ -45,40 +50,57 @@ export default function FilaScreen() {
     return !q || p.cliente_nome.toLowerCase().includes(q) || p.excursao_nome.toLowerCase().includes(q);
   });
 
-  if (loading) {
-    return <View style={[s.container, {justifyContent: 'center', alignItems: 'center'}]}><ActivityIndicator size="large" color={Colors.pulso} /></View>;
-  }
-
   return (
     <View style={s.container}>
       <View style={s.header}>
         <View style={s.titleRow}>
-          <Text style={s.title}>Fila de Expedição</Text>
+          <Text style={s.title} accessibilityRole="header">Fila de Expedição</Text>
           <View style={s.badge}><Text style={s.badgeText}>{fila.length}</Text></View>
         </View>
-        <TouchableOpacity style={s.exitBtn} onPress={() => rootNavigation.replace('Login')}>
+        <TouchableOpacity
+          style={s.exitBtn}
+          onPress={logout}
+          accessibilityRole="button"
+          accessibilityLabel="Sair da conta">
+          <Icon name="log-out" size={16} color={Colors.pulso} />
           <Text style={s.exitText}>Sair</Text>
         </TouchableOpacity>
       </View>
 
       <View style={s.resumoRow}>
-        <View style={s.resumoCard}>
-          <Text style={[s.resumoValor, {color: '#F59E0B'}]}>{fila.length}</Text>
+        <View style={s.resumoCard} accessibilityLabel={`Na fila: ${fila.length}`}>
+          <View style={s.resumoTopRow}>
+            <Icon name="clock" size={16} color="#F59E0B" />
+            <Text style={[s.resumoValor, {color: '#F59E0B'}]}>{fila.length}</Text>
+          </View>
           <Text style={s.resumoLabel}>Na fila</Text>
         </View>
-        <View style={s.resumoCard}>
-          <Text style={[s.resumoValor, {color: Colors.pulso}]}>{emAndamento.length}</Text>
+        <View style={s.resumoCard} accessibilityLabel={`Em andamento: ${emAndamento.length}`}>
+          <View style={s.resumoTopRow}>
+            <Icon name="navigation" size={16} color={Colors.pulso} />
+            <Text style={[s.resumoValor, {color: Colors.pulso}]}>{emAndamento.length}</Text>
+          </View>
           <Text style={s.resumoLabel}>Em andamento</Text>
         </View>
-        <View style={s.resumoCard}>
-          <Text style={[s.resumoValor, {color: '#86EFAC'}]}>{pedidos.filter(p => p.status === 'entregue').length}</Text>
+        <View style={s.resumoCard} accessibilityLabel={`Entregues: ${pedidos.filter(p => p.status === 'entregue').length}`}>
+          <View style={s.resumoTopRow}>
+            <Icon name="check-circle" size={16} color="#86EFAC" />
+            <Text style={[s.resumoValor, {color: '#86EFAC'}]}>{pedidos.filter(p => p.status === 'entregue').length}</Text>
+          </View>
           <Text style={s.resumoLabel}>Entregues</Text>
         </View>
       </View>
 
       <View style={s.searchBox}>
-        <Text style={s.searchIcon}>🔍</Text>
-        <TextInput style={s.searchInput} placeholder="Buscar pedido..." placeholderTextColor={Colors.gray} value={busca} onChangeText={setBusca} />
+        <Icon name="search" size={16} color={Colors.gray} />
+        <TextInput
+          style={s.searchInput}
+          placeholder="Buscar pedido..."
+          placeholderTextColor={Colors.gray}
+          value={busca}
+          onChangeText={setBusca}
+          accessibilityLabel="Buscar pedido"
+        />
       </View>
 
       <ScrollView
@@ -86,24 +108,39 @@ export default function FilaScreen() {
         contentContainerStyle={{padding: 24, paddingTop: 0, gap: 10}}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.pulso} />}
       >
-        {filtrados.map(p => (
-          <View key={p.id} style={s.card}>
+        {loading ? (
+          <>
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </>
+        ) : filtrados.length === 0 ? (
+          <EmptyState icon="inbox" title="Nenhum pedido na fila" subtitle="Novos pedidos aparecerão aqui quando forem criados" />
+        ) : filtrados.map(p => (
+          <View key={p.id} style={s.card} accessibilityLabel={`Pedido ${p.numero}, ${p.cliente_nome}, ${p.volumes} volumes`}>
             <View style={s.cardContent}>
               <View style={s.cardTop}>
                 <Text style={s.pedidoId}>#{p.numero}</Text>
               </View>
               <Text style={s.cliente}>{p.cliente_nome}</Text>
               <Text style={s.empresa}>{p.volumes} vol. · {p.descricao || 'Sem descrição'}</Text>
-              <Text style={s.destino}>📍 {p.excursao_nome}</Text>
+              <View style={s.destinoRow}>
+                <Icon name="map-pin" size={12} color={Colors.gray} />
+                <Text style={s.destino}>{p.excursao_nome}</Text>
+              </View>
             </View>
             <View style={s.actions}>
-              <TouchableOpacity style={s.iniciarBtn} onPress={() => iniciarColeta(p)}>
+              <TouchableOpacity
+                style={s.iniciarBtn}
+                onPress={() => iniciarColeta(p)}
+                accessibilityRole="button"
+                accessibilityLabel={`Iniciar coleta do pedido ${p.numero}`}>
+                <Icon name="play" size={14} color={Colors.matriz} />
                 <Text style={s.iniciarText}>Iniciar</Text>
               </TouchableOpacity>
             </View>
           </View>
         ))}
-        {filtrados.length === 0 && <Text style={s.empty}>Nenhum pedido na fila</Text>}
       </ScrollView>
     </View>
   );
@@ -113,27 +150,27 @@ const s = StyleSheet.create({
   container:   {flex: 1, backgroundColor: Colors.matriz},
   header:      {flexDirection: 'row', alignItems: 'center', padding: 24, paddingTop: 56, paddingBottom: 12, justifyContent: 'space-between'},
   titleRow:    {flexDirection: 'row', alignItems: 'center', gap: 12},
-  exitBtn:     {backgroundColor: '#162433', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8},
+  exitBtn:     {backgroundColor: '#162433', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6},
   exitText:    {color: Colors.pulso, fontSize: 13, fontWeight: '600'},
   title:       {fontSize: 20, fontWeight: '700', color: Colors.clareza},
   badge:       {backgroundColor: Colors.pulso, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3},
   badgeText:   {color: Colors.matriz, fontWeight: '800', fontSize: 14},
   resumoRow:   {flexDirection: 'row', gap: 8, paddingHorizontal: 24, marginBottom: 12},
-  resumoCard:  {flex: 1, backgroundColor: '#162433', borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#1E3448'},
+  resumoCard:  {flex: 1, backgroundColor: '#162433', borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#1E3448', gap: 4},
+  resumoTopRow:{flexDirection: 'row', alignItems: 'center', gap: 6},
   resumoValor: {fontSize: 20, fontWeight: '800'},
-  resumoLabel: {fontSize: 10, color: Colors.gray, marginTop: 2, fontWeight: '600'},
-  searchBox:   {flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 12, backgroundColor: '#162433', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 14},
-  searchIcon:  {fontSize: 16, marginRight: 8},
+  resumoLabel: {fontSize: 10, color: Colors.gray, fontWeight: '600'},
+  searchBox:   {flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 12, backgroundColor: '#162433', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 14, gap: 8},
   searchInput: {flex: 1, height: 44, color: Colors.clareza, fontSize: 15},
   card:        {backgroundColor: '#162433', borderRadius: 12, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#1E3448'},
   cardContent: {flex: 1},
   cardTop:     {flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4},
   pedidoId:    {fontSize: 16, fontWeight: '700', color: Colors.clareza},
   cliente:     {fontSize: 14, color: Colors.clareza, marginBottom: 2},
-  empresa:     {fontSize: 13, color: '#60A5FA', marginBottom: 2},
+  empresa:     {fontSize: 13, color: '#60A5FA', marginBottom: 4},
+  destinoRow:  {flexDirection: 'row', alignItems: 'center', gap: 4},
   destino:     {fontSize: 12, color: Colors.gray},
   actions:     {alignItems: 'center', gap: 8},
-  iniciarBtn:  {backgroundColor: Colors.pulso, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8},
+  iniciarBtn:  {backgroundColor: Colors.pulso, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6},
   iniciarText: {color: Colors.matriz, fontWeight: '700', fontSize: 13},
-  empty:       {textAlign: 'center', color: Colors.gray, marginTop: 40, fontSize: 15},
 });

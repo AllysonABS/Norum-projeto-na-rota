@@ -1,9 +1,9 @@
 import React from 'react';
-import {Text} from 'react-native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createMaterialTopTabNavigator} from '@react-navigation/material-top-tabs';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../theme/colors';
+import Icon from '../components/Icon';
 import FilaScreen from '../screens/despachante/FilaScreen';
 import EmAndamentoScreen from '../screens/despachante/EmAndamentoScreen';
 import HistoricoScreen from '../screens/despachante/HistoricoScreen';
@@ -17,8 +17,10 @@ export type DespachanteStackParamList = {
 const Stack = createNativeStackNavigator<DespachanteStackParamList>();
 const Tab = createMaterialTopTabNavigator();
 
-const icon: Record<string, string> = {
-  Fila: '📋', 'Em Andamento': '🔄', Histórico: '✅',
+const iconMap: Record<string, string> = {
+  Fila: 'clipboard',
+  'Em Andamento': 'navigation',
+  Histórico: 'check-circle',
 };
 
 function Tabs() {
@@ -30,7 +32,7 @@ function Tabs() {
       tabBarPosition="bottom"
       screenOptions={({route}) => ({
         tabBarIcon: ({focused}) => (
-          <Text style={{fontSize: 20, opacity: focused ? 1 : 0.5}}>{icon[route.name]}</Text>
+          <Icon name={iconMap[route.name]} size={20} color={focused ? Colors.pulso : '#4B6070'} />
         ),
         tabBarShowIcon: true,
         tabBarActiveTintColor: Colors.pulso,

@@ -1,9 +1,12 @@
-import React, {useState, useEffect, useCallback} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator} from 'react-native';
+import React, {useState, useCallback} from 'react';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import {useAuth} from '../../context/AuthContext';
 import {listarMinhasLojas, LojaData} from '../../services/api';
+import Icon from '../../components/Icon';
+import EmptyState from '../../components/EmptyState';
+import {SkeletonCard} from '../../components/Skeleton';
 
 export default function EmpresasScreen({navigation}: any) {
   const {cliente} = useAuth();
@@ -33,27 +36,40 @@ export default function EmpresasScreen({navigation}: any) {
       <View style={s.header}>
         <View style={s.headerRow}>
           <View>
-            <Text style={s.title}>Minhas Lojas</Text>
+            <Text style={s.title} accessibilityRole="header">Minhas Lojas</Text>
             <Text style={s.sub}>Toque para ver detalhes e pedidos</Text>
           </View>
-          <TouchableOpacity style={s.buscarBtn} onPress={() => navigation.navigate('BuscarLojas')}>
-            <Text style={s.buscarBtnText}>+ Buscar</Text>
+          <TouchableOpacity
+            style={s.buscarBtn}
+            onPress={() => navigation.navigate('BuscarLojas')}
+            accessibilityRole="button"
+            accessibilityLabel="Buscar novas lojas">
+            <Icon name="plus" size={14} color={Colors.matriz} />
+            <Text style={s.buscarBtnText}>Buscar</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={s.searchBox}>
-        <Text style={s.searchIcon}>🔍</Text>
-        <TextInput style={s.searchInput} placeholder="Buscar loja..." placeholderTextColor={Colors.gray} value={busca} onChangeText={setBusca} />
+        <Icon name="search" size={16} color={Colors.gray} />
+        <TextInput
+          style={s.searchInput}
+          placeholder="Buscar loja..."
+          placeholderTextColor={Colors.gray}
+          value={busca}
+          onChangeText={setBusca}
+          accessibilityLabel="Buscar loja"
+        />
       </View>
 
       {loading ? (
-        <View style={s.center}><ActivityIndicator size="large" color={Colors.pulso} /></View>
-      ) : filtradas.length === 0 ? (
-        <View style={s.center}>
-          <Text style={s.emptyText}>Nenhuma loja vinculada</Text>
-          <Text style={s.emptySubText}>Toque em "+ Buscar" para encontrar lojas</Text>
+        <View style={s.list}>
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
         </View>
+      ) : filtradas.length === 0 ? (
+        <EmptyState icon="shopping-bag" title="Nenhuma loja vinculada" subtitle='Toque em "+ Buscar" para encontrar lojas' />
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.list}>
           {filtradas.map((e, i) => {
@@ -63,7 +79,9 @@ export default function EmpresasScreen({navigation}: any) {
                 key={e.id}
                 style={s.card}
                 activeOpacity={0.85}
-                onPress={() => navigation.navigate('EmpresaDetail', {empresa: e})}>
+                onPress={() => navigation.navigate('EmpresaDetail', {empresa: e})}
+                accessibilityRole="button"
+                accessibilityLabel={`Loja ${e.nome_empresa}, ${e.cidade || 'sem localização'}`}>
                 <View style={[s.accent, {backgroundColor: cor}]} />
                 <View style={s.cardContent}>
                   <View style={s.cardTop}>
@@ -72,15 +90,19 @@ export default function EmpresasScreen({navigation}: any) {
                     </View>
                     <View style={s.cardInfo}>
                       <Text style={s.nome}>{e.nome_empresa}</Text>
-                      <Text style={s.cidade}>📍 {e.cidade && e.estado ? `${e.cidade}, ${e.estado}` : 'Localização não informada'}</Text>
+                      <View style={s.cidadeRow}>
+                        <Icon name="map-pin" size={11} color={Colors.gray} />
+                        <Text style={s.cidade}>{e.cidade && e.estado ? `${e.cidade}, ${e.estado}` : 'Localização não informada'}</Text>
+                      </View>
                     </View>
                     <View style={s.arrow}>
-                      <Text style={s.arrowText}>›</Text>
+                      <Icon name="chevron-right" size={18} color={Colors.clareza} />
                     </View>
                   </View>
                   {e.horario_funcionamento ? (
                     <View style={s.cardBottom}>
-                      <Text style={s.horarioText}>🕐 {e.horario_funcionamento}</Text>
+                      <Icon name="clock" size={12} color={Colors.gray} />
+                      <Text style={s.horarioText}>{e.horario_funcionamento}</Text>
                     </View>
                   ) : null}
                 </View>
@@ -99,10 +121,9 @@ const s = StyleSheet.create({
   headerRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
   title: {fontSize: 24, fontWeight: '800', color: Colors.clareza},
   sub: {fontSize: 13, color: Colors.gray, marginTop: 4},
-  buscarBtn: {backgroundColor: Colors.pulso, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8},
+  buscarBtn: {backgroundColor: Colors.pulso, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 6},
   buscarBtnText: {color: Colors.matriz, fontWeight: '700', fontSize: 13},
-  searchBox: {flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 14, backgroundColor: '#162433', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 14},
-  searchIcon: {fontSize: 16, marginRight: 8},
+  searchBox: {flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 14, backgroundColor: '#162433', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 14, gap: 8},
   searchInput: {flex: 1, height: 44, color: Colors.clareza, fontSize: 15},
   list: {padding: 20, paddingTop: 0, gap: 16, paddingBottom: 40},
   card: {backgroundColor: '#162433', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#1E3448'},
@@ -113,12 +134,9 @@ const s = StyleSheet.create({
   initialText: {fontSize: 22, fontWeight: '800'},
   cardInfo: {flex: 1},
   nome: {fontSize: 17, fontWeight: '700', color: Colors.clareza},
-  cidade: {fontSize: 12, color: Colors.gray, marginTop: 3},
+  cidadeRow: {flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3},
+  cidade: {fontSize: 12, color: Colors.gray},
   arrow: {width: 32, height: 32, borderRadius: 10, backgroundColor: '#1E3448', alignItems: 'center', justifyContent: 'center'},
-  arrowText: {fontSize: 20, color: Colors.clareza, fontWeight: '300', marginTop: -2},
-  cardBottom: {marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#1E3448'},
+  cardBottom: {marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#1E3448', flexDirection: 'row', alignItems: 'center', gap: 6},
   horarioText: {fontSize: 13, color: Colors.gray},
-  center: {flex: 1, alignItems: 'center', justifyContent: 'center'},
-  emptyText: {fontSize: 16, color: Colors.clareza, fontWeight: '600'},
-  emptySubText: {fontSize: 13, color: Colors.gray, marginTop: 6},
 });

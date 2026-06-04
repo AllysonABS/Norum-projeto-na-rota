@@ -1,18 +1,23 @@
-const TZ = 'America/Sao_Paulo';
+function parseUTC(date: string): Date {
+  // O banco retorna timestamps sem timezone indicator
+  // Forcamos interpretacao como UTC adicionando Z
+  const d = date.includes('Z') || date.includes('+') ? date : date.replace(' ', 'T') + 'Z';
+  return new Date(d);
+}
 
 export function formatHora(date: string | null): string {
   if (!date) return '';
-  return new Date(date).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit', timeZone: TZ});
+  return parseUTC(date).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo'});
 }
 
 export function formatData(date: string | null): string {
   if (!date) return '';
-  return new Date(date).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short', timeZone: TZ});
+  return parseUTC(date).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short', timeZone: 'America/Sao_Paulo'});
 }
 
 export function formatDataMesAno(date: string | null): string {
   if (!date) return '—';
-  return new Date(date).toLocaleDateString('pt-BR', {month: 'short', year: 'numeric', timeZone: TZ});
+  return parseUTC(date).toLocaleDateString('pt-BR', {month: 'short', year: 'numeric', timeZone: 'America/Sao_Paulo'});
 }
 
 export function tempoAtras(date: string): string {

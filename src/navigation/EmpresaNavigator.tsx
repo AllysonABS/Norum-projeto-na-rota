@@ -1,9 +1,9 @@
 import React from 'react';
-import {Text} from 'react-native';
 import {createMaterialTopTabNavigator} from '@react-navigation/material-top-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../theme/colors';
+import Icon from '../components/Icon';
 import EmpresaDashboard from '../screens/empresa/EmpresaDashboard';
 import PedidosScreen from '../screens/empresa/PedidosScreen';
 import ClientesScreen from '../screens/empresa/ClientesScreen';
@@ -17,8 +17,11 @@ import NotificacoesScreen from '../screens/empresa/NotificacoesScreen';
 const Tab = createMaterialTopTabNavigator();
 const Stack = createNativeStackNavigator();
 
-const icon: Record<string, string> = {
-  Dashboard: '📊', Pedidos: '📦', Clientes: '👥', Mais: '⋯',
+const iconMap: Record<string, string> = {
+  Dashboard: 'home',
+  Pedidos: 'package',
+  Clientes: 'users',
+  Mais: 'menu',
 };
 
 function EmpresaTabs() {
@@ -30,7 +33,7 @@ function EmpresaTabs() {
       tabBarPosition="bottom"
       screenOptions={({route}) => ({
         tabBarIcon: ({focused}) => (
-          <Text style={{fontSize: 20, opacity: focused ? 1 : 0.5}}>{icon[route.name]}</Text>
+          <Icon name={iconMap[route.name]} size={20} color={focused ? Colors.pulso : '#4B6070'} />
         ),
         tabBarShowIcon: true,
         tabBarActiveTintColor: Colors.pulso,

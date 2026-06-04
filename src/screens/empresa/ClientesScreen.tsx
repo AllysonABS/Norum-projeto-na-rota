@@ -1,12 +1,12 @@
 import React, {useState, useCallback} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, RefreshControl, ActivityIndicator} from 'react-native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, RefreshControl, ActivityIndicator, Pressable} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import Toast, {useToast} from '../../components/Toast';
 import {useAuth} from '../../context/AuthContext';
 import {listarClientesEmpresa, atualizarVinculoCliente, bloquearVinculoCliente, excluirVinculoCliente, cadastrarClienteManual} from '../../services/api';
 import {useAlert} from '../../components/CustomAlert';
-
+import Icon from '../../components/Icon';
 function maskCpf(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 11);
   return digits
@@ -43,6 +43,7 @@ export default function ClientesScreen() {
   const [modal, setModal] = useState(false);
   const [modalNovo, setModalNovo] = useState(false);
   const [editando, setEditando] = useState<ClienteVinculo | null>(null);
+  const [menuAberto, setMenuAberto] = useState<string | null>(null);
 
   // Form
   const [nome, setNome] = useState('');
@@ -168,9 +169,13 @@ export default function ClientesScreen() {
       </View>
 
       <View style={s.searchBox}>
-        <Text style={s.searchIcon}>🔍</Text>
+        <Icon name="search" size={16} color={Colors.gray} />
         <TextInput style={s.searchInput} placeholder="Buscar cliente..." placeholderTextColor={Colors.gray} value={busca} onChangeText={setBusca} />
       </View>
+
+      {menuAberto && (
+        <Pressable style={s.menuBackdrop} onPress={() => setMenuAberto(null)} />
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{padding: 24, paddingTop: 0, gap: 10, paddingBottom: 40}} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.pulso} />}>
         {filtrados.length === 0 ? (
@@ -183,28 +188,38 @@ export default function ClientesScreen() {
             <View style={s.info}>
               <Text style={s.nome}>{c.nome}</Text>
               <Text style={s.doc}>{c.cpf ? maskCpf(c.cpf) : ''}{c.cnpj ? ` · ${maskCnpj(c.cnpj)}` : ''}</Text>
-              {c.status === 'bloqueado' && <Text style={s.bloqueado}>⛔ Bloqueado</Text>}
+              {c.status === 'bloqueado' && <Text style={s.bloqueado}>Bloqueado</Text>}
             </View>
-            <View style={s.cardActions}>
-              <TouchableOpacity onPress={() => abrirEditar(c)} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
-                <Text style={s.iconBtn}>✏️</Text>
+            <View style={{position: 'relative'}}>
+              <TouchableOpacity onPress={() => setMenuAberto(menuAberto === c.vinculo_id ? null : c.vinculo_id)} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+                <Icon name="more-vertical" size={20} color={Colors.gray} />
               </TouchableOpacity>
-              {c.status !== 'bloqueado' && (
-                <TouchableOpacity onPress={() => bloquear(c)} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
-                  <Text style={s.iconBtn}>⛔</Text>
-                </TouchableOpacity>
+              {menuAberto === c.vinculo_id && (
+                <View style={s.menuPopup}>
+                  <TouchableOpacity style={s.menuItem} onPress={() => { setMenuAberto(null); abrirEditar(c); }}>
+                    <Icon name="edit-2" size={14} color={Colors.clareza} />
+                    <Text style={s.menuItemText}>Editar</Text>
+                  </TouchableOpacity>
+                  {c.status !== 'bloqueado' && (
+                    <TouchableOpacity style={s.menuItem} onPress={() => { setMenuAberto(null); bloquear(c); }}>
+                      <Icon name="slash" size={14} color="#F59E0B" />
+                      <Text style={[s.menuItemText, {color: '#F59E0B'}]}>Bloquear</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity style={[s.menuItem, {borderBottomWidth: 0}]} onPress={() => { setMenuAberto(null); excluir(c); }}>
+                    <Icon name="trash-2" size={14} color="#EF4444" />
+                    <Text style={[s.menuItemText, {color: '#EF4444'}]}>Excluir</Text>
+                  </TouchableOpacity>
+                </View>
               )}
-              <TouchableOpacity onPress={() => excluir(c)} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
-                <Text style={s.iconBtn}>🗑️</Text>
-              </TouchableOpacity>
             </View>
           </View>
         ))}
       </ScrollView>
 
       <Modal visible={modal} transparent animationType="slide">
-        <View style={s.overlay}>
-          <View style={s.sheet}>
+        <Pressable style={s.overlay} onPress={fecharModal}>
+          <Pressable style={s.sheet} onPress={() => {}}>
             <ScrollView showsVerticalScrollIndicator={false}>
               <Text style={s.sheetTitle}>Editar Cliente</Text>
 
@@ -252,12 +267,12 @@ export default function ClientesScreen() {
                 <Text style={s.cancel}>Cancelar</Text>
               </TouchableOpacity>
             </ScrollView>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
       <Modal visible={modalNovo} transparent animationType="slide">
-        <View style={s.overlay}>
-          <View style={s.sheet}>
+        <Pressable style={s.overlay} onPress={() => setModalNovo(false)}>
+          <Pressable style={s.sheet} onPress={() => {}}>
             <ScrollView showsVerticalScrollIndicator={false}>
               <Text style={s.sheetTitle}>Novo Cliente</Text>
 
@@ -298,15 +313,17 @@ export default function ClientesScreen() {
               <Text style={s.sectionTitle}>Observações</Text>
               <TextInput style={[s.input, {height: 80, textAlignVertical: 'top', paddingTop: 12}]} value={observacoes} onChangeText={setObservacoes} placeholderTextColor={Colors.gray} placeholder="Anotações sobre o cliente..." multiline />
 
-              <TouchableOpacity style={s.saveBtn} onPress={salvarNovo}>
-                <Text style={s.saveBtnText}>Cadastrar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setModalNovo(false)}>
-                <Text style={s.cancel}>Cancelar</Text>
-              </TouchableOpacity>
+              <View style={s.btnRow}>
+                <TouchableOpacity style={s.cancelBtn} onPress={() => setModalNovo(false)}>
+                  <Text style={s.cancelBtnText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.saveBtn} onPress={salvarNovo}>
+                  <Text style={s.saveBtnText}>Cadastrar</Text>
+                </TouchableOpacity>
+              </View>
             </ScrollView>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -327,6 +344,10 @@ const s = StyleSheet.create({
   bloqueado: {fontSize: 11, color: '#EF4444', marginTop: 2, fontWeight: '600'},
   cardActions:{flexDirection: 'row', gap: 12, alignItems: 'center'},
   iconBtn:   {fontSize: 18},
+  menuPopup: {position: 'absolute', top: 28, right: 0, backgroundColor: '#0F1F2E', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', width: 150, zIndex: 100, shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.3, shadowRadius: 8, elevation: 10},
+  menuBackdrop:{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50},
+  menuItem:  {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: '#1E3448'},
+  menuItemText:{fontSize: 14, color: Colors.clareza, fontWeight: '500'},
   searchBox: {flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 14, backgroundColor: '#162433', borderRadius: 10, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 14},
   searchIcon:{fontSize: 16, marginRight: 8},
   searchInput:{flex: 1, height: 44, color: Colors.clareza, fontSize: 15},
@@ -339,7 +360,10 @@ const s = StyleSheet.create({
   label:     {fontSize: 13, fontWeight: '600', color: Colors.gray, marginBottom: 6, marginTop: 12},
   row:       {flexDirection: 'row'},
   input:     {height: 50, backgroundColor: '#162433', borderRadius: 8, borderWidth: 1, borderColor: '#1E3448', paddingHorizontal: 16, color: Colors.clareza, fontSize: 15},
-  saveBtn:   {height: 52, backgroundColor: Colors.pulso, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 24},
+  saveBtn:   {flex: 1, height: 52, backgroundColor: Colors.pulso, borderRadius: 8, alignItems: 'center', justifyContent: 'center'},
   saveBtnText:{color: Colors.matriz, fontWeight: '700', fontSize: 16},
+  btnRow:    {flexDirection: 'row', gap: 12, marginTop: 24},
+  cancelBtn: {flex: 1, height: 52, backgroundColor: '#162433', borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#EF4444'},
+  cancelBtnText:{color: '#EF4444', fontWeight: '700', fontSize: 16},
   cancel:    {textAlign: 'center', color: Colors.gray, marginTop: 16, fontSize: 14},
 });

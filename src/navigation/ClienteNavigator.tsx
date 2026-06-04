@@ -1,9 +1,9 @@
 import React from 'react';
-import {Text} from 'react-native';
 import {createMaterialTopTabNavigator} from '@react-navigation/material-top-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../theme/colors';
+import Icon from '../components/Icon';
 import PedidosScreen from '../screens/cliente/PedidosScreen';
 import EmpresasScreen from '../screens/cliente/EmpresasScreen';
 import EmpresaDetailScreen from '../screens/cliente/EmpresaDetailScreen';
@@ -23,8 +23,10 @@ function EmpresasStackNavigator() {
   );
 }
 
-const icon: Record<string, string> = {
-  Pedidos: '📦', Lojas: '🏢', Perfil: '👤',
+const iconMap: Record<string, string> = {
+  Pedidos: 'package',
+  Lojas: 'shopping-bag',
+  Perfil: 'user',
 };
 
 export default function ClienteNavigator() {
@@ -36,7 +38,7 @@ export default function ClienteNavigator() {
       tabBarPosition="bottom"
       screenOptions={({route}) => ({
         tabBarIcon: ({focused}) => (
-          <Text style={{fontSize: 20, opacity: focused ? 1 : 0.5}}>{icon[route.name]}</Text>
+          <Icon name={iconMap[route.name]} size={20} color={focused ? Colors.pulso : '#4B6070'} />
         ),
         tabBarShowIcon: true,
         tabBarActiveTintColor: Colors.pulso,

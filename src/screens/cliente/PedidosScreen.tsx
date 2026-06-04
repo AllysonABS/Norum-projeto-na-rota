@@ -1,5 +1,5 @@
 import React, {useState, useCallback, useEffect} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, RefreshControl, ActivityIndicator, Image} from 'react-native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, RefreshControl, ActivityIndicator, Image, Pressable} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../../theme/colors';
 import StatusBadge from '../../components/StatusBadge';
@@ -8,6 +8,7 @@ import {listarPedidosCliente, PedidoData} from '../../services/api';
 import {requestNotificationPermission, getFCMToken, registrarTokenCliente} from '../../services/notifications';
 import PhotoGallery from '../../components/PhotoGallery';
 import {formatHora} from '../../utils/date';
+import Icon from '../../components/Icon';
 
 type Status = 'aguardando' | 'em_transito' | 'entregue';
 
@@ -82,15 +83,24 @@ export default function PedidosScreen() {
 
       <View style={s.resumoRow}>
         <View style={s.resumoCard}>
-          <Text style={[s.resumoValor, {color: Colors.pulso}]}>{emAndamento}</Text>
+          <View style={s.resumoTopRow}>
+            <Icon name="navigation" size={16} color={Colors.pulso} />
+            <Text style={[s.resumoValor, {color: Colors.pulso}]}>{emAndamento}</Text>
+          </View>
           <Text style={s.resumoLabel}>Em trânsito</Text>
         </View>
         <View style={s.resumoCard}>
-          <Text style={[s.resumoValor, {color: '#F59E0B'}]}>{aguardando}</Text>
+          <View style={s.resumoTopRow}>
+            <Icon name="clock" size={16} color="#F59E0B" />
+            <Text style={[s.resumoValor, {color: '#F59E0B'}]}>{aguardando}</Text>
+          </View>
           <Text style={s.resumoLabel}>Aguardando</Text>
         </View>
         <View style={s.resumoCard}>
-          <Text style={[s.resumoValor, {color: '#86EFAC'}]}>{entregues}</Text>
+          <View style={s.resumoTopRow}>
+            <Icon name="check-circle" size={16} color="#86EFAC" />
+            <Text style={[s.resumoValor, {color: '#86EFAC'}]}>{entregues}</Text>
+          </View>
           <Text style={s.resumoLabel}>Entregues</Text>
         </View>
       </View>
@@ -122,8 +132,8 @@ export default function PedidosScreen() {
       </ScrollView>
 
       <Modal visible={!!selecionado} transparent animationType="slide">
-        <View style={s.overlay}>
-          <View style={s.sheet}>
+        <Pressable style={s.overlay} onPress={() => setSelecionado(null)}>
+          <Pressable style={s.sheet} onPress={() => {}}>
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={s.sheetHeader}>
                 <View>
@@ -144,8 +154,10 @@ export default function PedidosScreen() {
                     {i < (selecionado.etapas?.length ?? 0) - 1 && <View style={s.timelineBar} />}
                   </View>
                   <View style={s.timelineText}>
-                    {t.hora && <Text style={s.timelineHora}>{formatHora(t.hora)}</Text>}
-                    <Text style={s.timelineEvento}>{t.nome}</Text>
+                    <View style={s.timelineRow}>
+                      {t.hora && <Text style={s.timelineHora}>{formatHora(t.hora)}</Text>}
+                      <Text style={s.timelineEvento}>{t.nome}</Text>
+                    </View>
                   </View>
                 </View>
               ))}
@@ -161,8 +173,8 @@ export default function PedidosScreen() {
                 <Text style={s.closeBtnText}>Fechar</Text>
               </TouchableOpacity>
             </ScrollView>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -174,6 +186,7 @@ const s = StyleSheet.create({
   title:          {fontSize: 22, fontWeight: '700', color: Colors.clareza},
   resumoRow:      {flexDirection: 'row', gap: 8, paddingHorizontal: 24, marginBottom: 14},
   resumoCard:     {flex: 1, backgroundColor: '#162433', borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#1E3448'},
+  resumoTopRow:   {flexDirection: 'row', alignItems: 'center', gap: 6},
   resumoValor:    {fontSize: 20, fontWeight: '800'},
   resumoLabel:    {fontSize: 10, color: Colors.gray, marginTop: 2, fontWeight: '600'},
   filtrosScroll:  {maxHeight: 44, marginBottom: 10},
@@ -202,7 +215,8 @@ const s = StyleSheet.create({
   timelineDot:    {width: 10, height: 10, borderRadius: 5, backgroundColor: '#1E3448', marginTop: 3},
   timelineBar:    {width: 2, flex: 1, backgroundColor: '#1E3448', marginTop: 4},
   timelineText:   {flex: 1, paddingBottom: 16},
-  timelineHora:   {fontSize: 12, color: Colors.gray, marginBottom: 2},
+  timelineRow:    {flexDirection: 'row', alignItems: 'center', gap: 8},
+  timelineHora:   {fontSize: 12, color: Colors.gray, minWidth: 45},
   timelineEvento: {fontSize: 14, color: Colors.clareza, fontWeight: '500'},
   closeBtn:       {height: 52, backgroundColor: '#162433', borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 20, borderWidth: 1, borderColor: '#1E3448'},
   closeBtnText:   {color: Colors.clareza, fontWeight: '600', fontSize: 15},

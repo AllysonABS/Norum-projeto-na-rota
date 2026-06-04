@@ -6,11 +6,12 @@ import {Colors} from '../../theme/colors';
 import {useAuth} from '../../context/AuthContext';
 import {listarNotificacoes, marcarNotificacoesLidas, NotificacaoData} from '../../services/api';
 import {tempoAtras} from '../../utils/date';
+import Icon from '../../components/Icon';
 
-const icones: Record<string, string> = {
-  novo_vinculo: '🔗',
-  novo_pedido: '📦',
-  alerta: '⚠️',
+const icones: Record<string, {name: string; color: string}> = {
+  novo_vinculo: {name: 'link', color: '#60A5FA'},
+  novo_pedido: {name: 'package', color: Colors.pulso},
+  alerta: {name: 'alert-triangle', color: '#F59E0B'},
 };
 
 export default function NotificacoesScreen() {
@@ -44,8 +45,9 @@ export default function NotificacoesScreen() {
   return (
     <View style={s.container}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={s.backText}>← Voltar</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12}}>
+          <Icon name="arrow-left" size={18} color={Colors.pulso} />
+          <Text style={s.backText}>Voltar</Text>
         </TouchableOpacity>
         <Text style={s.title}>Notificações</Text>
       </View>
@@ -57,12 +59,16 @@ export default function NotificacoesScreen() {
       >
         {notificacoes.length === 0 ? (
           <View style={s.center}>
-            <Text style={s.emptyIcon}>🔔</Text>
+            <Icon name="bell" size={48} color={Colors.gray} />
             <Text style={s.emptyText}>Nenhuma notificação</Text>
           </View>
-        ) : notificacoes.map(n => (
+        ) : notificacoes.map(n => {
+          const ic = icones[n.tipo] || {name: 'bell', color: Colors.gray};
+          return (
           <View key={n.id} style={[s.card, !n.lida && s.cardNaoLida]}>
-            <Text style={s.icon}>{icones[n.tipo] || '🔔'}</Text>
+            <View style={s.iconWrap}>
+              <Icon name={ic.name} size={20} color={ic.color} />
+            </View>
             <View style={s.info}>
               <Text style={s.titulo}>{n.titulo}</Text>
               <Text style={s.mensagem}>{n.mensagem}</Text>
@@ -70,7 +76,8 @@ export default function NotificacoesScreen() {
             </View>
             {!n.lida && <View style={s.dot} />}
           </View>
-        ))}
+          );
+        })}
       </ScrollView>
     </View>
   );
@@ -80,12 +87,12 @@ const s = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.matriz},
   center:    {flex: 1, alignItems: 'center', justifyContent: 'center'},
   header:    {padding: 24, paddingTop: 56, paddingBottom: 12},
-  backText:  {color: Colors.pulso, fontSize: 14, fontWeight: '600', marginBottom: 12},
+  backText:  {color: Colors.pulso, fontSize: 14, fontWeight: '600'},
   title:     {fontSize: 22, fontWeight: '700', color: Colors.clareza},
   list:      {padding: 24, paddingTop: 0, gap: 10, paddingBottom: 40},
   card:      {backgroundColor: '#162433', borderRadius: 12, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 1, borderColor: '#1E3448'},
   cardNaoLida:{borderColor: Colors.pulso + '40', backgroundColor: '#162433'},
-  icon:      {fontSize: 24},
+  iconWrap:  {width: 40, height: 40, borderRadius: 20, backgroundColor: '#1E3448', alignItems: 'center', justifyContent: 'center'},
   info:      {flex: 1},
   titulo:    {fontSize: 15, fontWeight: '700', color: Colors.clareza},
   mensagem:  {fontSize: 13, color: Colors.gray, marginTop: 3},

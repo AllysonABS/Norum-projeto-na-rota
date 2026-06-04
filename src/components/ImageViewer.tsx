@@ -34,16 +34,20 @@ export default function ImageViewer({visible, url, onClose}: Props) {
       const ext = url.split('.').pop()?.split('?')[0] || 'jpg';
       const fileName = `narota_${Date.now()}.${ext}`;
       const dirs = ReactNativeBlobUtil.fs.dirs;
-      const filePath = `${dirs.DCIMDir}/${fileName}`;
+      const filePath = `${dirs.PictureDir}/${fileName}`;
 
-      await ReactNativeBlobUtil.config({
-        fileCache: true,
+      const res = await ReactNativeBlobUtil.config({
+        fileCache: false,
         path: filePath,
       }).fetch('GET', url);
 
-      // Notifica a galeria no Android
+      // Registra na galeria do Android
       if (Platform.OS === 'android') {
-        await ReactNativeBlobUtil.fs.scanFile([{path: filePath, mime: `image/${ext}`}]);
+        await ReactNativeBlobUtil.MediaCollection.copyToMediaStore(
+          {name: fileName, parentFolder: '', mimeType: `image/${ext}`},
+          'Image',
+          res.path(),
+        );
       }
 
       setSaving(false);

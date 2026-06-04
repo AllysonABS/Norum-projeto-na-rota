@@ -1,5 +1,5 @@
 import React, {useState, useCallback} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, RefreshControl, ActivityIndicator} from 'react-native';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, RefreshControl, Pressable} from 'react-native';
 import {useNavigation, useFocusEffect} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {DespachanteStackParamList} from '../../navigation/DespachanteNavigator';
@@ -7,6 +7,10 @@ import {Colors} from '../../theme/colors';
 import {useAuth} from '../../context/AuthContext';
 import {listarPedidosDespachante, PedidoData} from '../../services/api';
 import {formatHora} from '../../utils/date';
+import Icon from '../../components/Icon';
+import EmptyState from '../../components/EmptyState';
+import {SkeletonCard} from '../../components/Skeleton';
+import {hapticLight} from '../../utils/haptics';
 
 export default function EmAndamentoScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<DespachanteStackParamList>>();
@@ -33,17 +37,14 @@ export default function EmAndamentoScreen() {
   }, [despachante?.id]);
 
   const confirmarEntrega = (p: PedidoData) => {
+    hapticLight();
     navigation.navigate('Checklist', {pedidoId: p.id, etapa: 'entrega'});
   };
-
-  if (loading) {
-    return <View style={[s.container, {justifyContent: 'center', alignItems: 'center'}]}><ActivityIndicator size="large" color={Colors.pulso} /></View>;
-  }
 
   return (
     <View style={s.container}>
       <View style={s.header}>
-        <Text style={s.title}>Em Andamento</Text>
+        <Text style={s.title} accessibilityRole="header">Em Andamento</Text>
         <View style={s.badge}><Text style={s.badgeText}>{pedidos.length}</Text></View>
       </View>
 
@@ -52,10 +53,14 @@ export default function EmAndamentoScreen() {
         contentContainerStyle={{padding: 24, paddingTop: 0, gap: 10}}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.pulso} />}
       >
-        {pedidos.map(p => {
+        {loading ? (
+          <><SkeletonCard /><SkeletonCard /><SkeletonCard /></>
+        ) : pedidos.length === 0 ? (
+          <EmptyState icon="navigation" title="Nenhum pedido em andamento" subtitle="Inicie uma coleta na aba Fila para ver aqui" />
+        ) : pedidos.map(p => {
           const etapaAtual = p.etapas?.find(e => !e.concluida)?.nome || 'Em andamento';
           return (
-            <View key={p.id} style={s.card}>
+            <View key={p.id} style={s.card} accessibilityLabel={`Pedido ${p.numero}, ${p.cliente_nome}, ${etapaAtual}`}>
               <View style={s.cardLeft}>
                 <View style={s.pulse} />
               </View>
@@ -64,26 +69,39 @@ export default function EmAndamentoScreen() {
                   <Text style={s.id}>#{p.numero} · {p.cliente_nome}</Text>
                 </View>
                 <Text style={s.empresa}>{p.volumes} vol.</Text>
-                <Text style={s.etapa}>{etapaAtual}</Text>
-                <Text style={s.destino}>📍 {p.excursao_nome}</Text>
+                <View style={s.etapaRow2}>
+                  <Icon name="activity" size={12} color={Colors.pulso} />
+                  <Text style={s.etapa}>{etapaAtual}</Text>
+                </View>
+                <View style={s.destinoRow}>
+                  <Icon name="map-pin" size={12} color={Colors.gray} />
+                  <Text style={s.destino}>{p.excursao_nome}</Text>
+                </View>
               </View>
               <View style={s.actions}>
-                <TouchableOpacity style={s.entregarBtn} onPress={() => confirmarEntrega(p)}>
+                <TouchableOpacity
+                  style={s.entregarBtn}
+                  onPress={() => confirmarEntrega(p)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Entregar pedido ${p.numero}`}>
+                  <Icon name="check" size={14} color={Colors.pulso} />
                   <Text style={s.entregarText}>Entregar</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => setDetalhe(p)}>
+                <TouchableOpacity
+                  onPress={() => setDetalhe(p)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ver detalhes do pedido ${p.numero}`}>
                   <Text style={s.verText}>Detalhes</Text>
                 </TouchableOpacity>
               </View>
             </View>
           );
         })}
-        {pedidos.length === 0 && <Text style={s.empty}>Nenhum pedido em andamento</Text>}
       </ScrollView>
 
       <Modal visible={!!detalhe} transparent animationType="slide">
-        <View style={s.overlay}>
-          <View style={s.sheet}>
+        <Pressable style={s.overlay} onPress={() => setDetalhe(null)}>
+          <Pressable style={s.sheet} onPress={() => {}}>
             <ScrollView showsVerticalScrollIndicator={false}>
               <Text style={s.sheetTitle}>#{detalhe?.numero}</Text>
               <View style={s.detRow}><Text style={s.detLabel}>Cliente</Text><Text style={s.detValue}>{detalhe?.cliente_nome}</Text></View>
@@ -93,19 +111,23 @@ export default function EmAndamentoScreen() {
 
               <Text style={s.sectionTitle}>Etapas</Text>
               {detalhe?.etapas?.map((etapa) => (
-                <View key={etapa.id} style={s.etapaRow}>
+                <View key={etapa.id} style={s.etapaRowDet}>
                   <View style={[s.etapaDot, etapa.concluida && s.etapaDotDone]} />
                   <Text style={[s.etapaNome, etapa.concluida && s.etapaNomeDone]}>{etapa.nome}</Text>
                   {etapa.hora && <Text style={s.etapaHora}>{formatHora(etapa.hora)}</Text>}
                 </View>
               ))}
 
-              <TouchableOpacity style={s.closeBtn} onPress={() => setDetalhe(null)}>
+              <TouchableOpacity
+                style={s.closeBtn}
+                onPress={() => setDetalhe(null)}
+                accessibilityRole="button"
+                accessibilityLabel="Fechar detalhes">
                 <Text style={s.closeBtnText}>Fechar</Text>
               </TouchableOpacity>
             </ScrollView>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -124,13 +146,14 @@ const s = StyleSheet.create({
   cardTop:     {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
   id:          {fontSize: 14, fontWeight: '700', color: Colors.clareza},
   empresa:     {fontSize: 13, color: '#60A5FA', marginTop: 4},
-  etapa:       {fontSize: 13, color: Colors.pulso, marginTop: 2},
-  destino:     {fontSize: 12, color: Colors.gray, marginTop: 2},
-  actions:     {justifyContent: 'center', alignItems: 'center', gap: 8},
-  entregarBtn: {backgroundColor: '#162433', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: Colors.pulso},
+  etapaRow2:   {flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2},
+  etapa:       {fontSize: 13, color: Colors.pulso},
+  destinoRow:  {flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2},
+  destino:     {fontSize: 12, color: Colors.gray},
+  actions:     {justifyContent: 'center', alignItems: 'center', gap: 14},
+  entregarBtn: {backgroundColor: '#162433', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: Colors.pulso, flexDirection: 'row', alignItems: 'center', gap: 4},
   entregarText:{color: Colors.pulso, fontWeight: '700', fontSize: 13},
   verText:     {fontSize: 11, color: Colors.gray, fontWeight: '600'},
-  empty:       {textAlign: 'center', color: Colors.gray, marginTop: 40, fontSize: 15},
   overlay:     {flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end'},
   sheet:       {backgroundColor: '#0F1F2E', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 28, paddingBottom: 40, maxHeight: '80%'},
   sheetTitle:  {fontSize: 20, fontWeight: '700', color: Colors.clareza, marginBottom: 16},
@@ -138,7 +161,7 @@ const s = StyleSheet.create({
   detLabel:    {fontSize: 13, color: Colors.gray},
   detValue:    {fontSize: 13, fontWeight: '600', color: Colors.clareza},
   sectionTitle:{fontSize: 14, fontWeight: '700', color: Colors.pulso, marginTop: 20, marginBottom: 12},
-  etapaRow:    {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8},
+  etapaRowDet: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8},
   etapaDot:    {width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#1E3448', backgroundColor: '#0F1F2E'},
   etapaDotDone:{backgroundColor: Colors.pulso, borderColor: Colors.pulso},
   etapaNome:   {flex: 1, fontSize: 14, color: Colors.gray},
