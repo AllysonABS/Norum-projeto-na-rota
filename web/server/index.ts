@@ -100,7 +100,7 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   ssl: process.env.DB_SSL === 'true',
-  max: parseInt(process.env.DB_POOL_MAX || '20'),
+  max: parseInt(process.env.DB_POOL_MAX || '40'),
   idleTimeoutMillis: 10000,
   connectionTimeoutMillis: 3000,
 });
