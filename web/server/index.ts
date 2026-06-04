@@ -242,12 +242,12 @@ const app = express();
 app.use(helmet());
 app.use(cors({
   origin: (origin, callback) => {
-    // Permite requests sem origin (mobile apps, curl em dev)
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Bloqueado por CORS'));
-    }
+    // Apps mobile não enviam Origin — sempre permitir
+    if (!origin) return callback(null, true);
+    // Permitir origens configuradas
+    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    // Bloquear outras origens mas sem crashear
+    callback(null, false);
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
