@@ -1,0 +1,14 @@
+{
+  "name": "norum-load-tests",
+  "private": true,
+  "scripts": {
+    "test:light": "npx tsx stress-test.ts --users 100 --duration 30",
+    "test:medium": "npx tsx stress-test.ts --users 1000 --duration 60",
+    "test:heavy": "npx tsx stress-test.ts --users 4000 --duration 120",
+    "test:full": "npx tsx stress-test.ts --users 4000 --duration 180 --with-uploads"
+  },
+  "dependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}

@@ -8,7 +8,26 @@ import admin from 'firebase-admin';
 import { readFileSync, existsSync } from 'fs';
 import multer from 'multer';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import crypto from 'crypto';
+import cluster from 'cluster';
+import os from 'os';
+
+// === CLUSTER MODE ===
+const NUM_WORKERS = parseInt(process.env.WORKERS || '') || Math.min(os.cpus().length, 8);
+
+if (cluster.isPrimary && process.env.NODE_ENV === 'production') {
+  console.log(`[CLUSTER] Primary ${process.pid} starting ${NUM_WORKERS} workers`);
+  for (let i = 0; i < NUM_WORKERS; i++) cluster.fork();
+  cluster.on('exit', (worker) => {
+    console.log(`[CLUSTER] Worker ${worker.process.pid} died, restarting...`);
+    cluster.fork();
+  });
+} else {
+  startServer();
+}
+
+function startServer() {
 
 // R2 (Cloudflare) config
 const r2 = new S3Client({
@@ -42,9 +61,37 @@ if (existsSync(firebaseKeyPath)) {
   console.warn('Firebase service account not found, push notifications disabled.');
 }
 
+// === RATE LIMITING (in-memory, simples) ===
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT || '200'); // req/min por IP
+
+function rateLimiter(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + 60000 });
+    return next();
+  }
+  entry.count++;
+  if (entry.count > RATE_LIMIT_MAX) {
+    return res.status(429).json({ error: 'Muitas requisições. Tente novamente em breve.' });
+  }
+  next();
+}
+
+// Limpa map a cada 5min pra não vazar memória
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimitMap) {
+    if (now > entry.resetAt) rateLimitMap.delete(ip);
+  }
+}, 300000);
+
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+app.use(rateLimiter);
 
 const pool = new Pool({
   host: process.env.DB_HOST,
@@ -53,6 +100,9 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   ssl: process.env.DB_SSL === 'true',
+  max: parseInt(process.env.DB_POOL_MAX || '50'),
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
 });
 
 // Cadastro de empresa
@@ -861,7 +911,41 @@ app.put('/api/pedidos/:pedidoId/concluir-etapas', async (req, res) => {
   }
 });
 
-// Upload de foto do pedido
+// === PRESIGNED URL - Client faz upload DIRETO pro R2 (não passa pelo server) ===
+app.post('/api/pedidos/:pedidoId/upload-url', async (req, res) => {
+  try {
+    const {pedidoId} = req.params;
+    const {etapa, contentType, ext} = req.body;
+
+    const pedidoRes = await pool.query('SELECT empresa_id, cliente_nome FROM pedidos WHERE id=$1', [pedidoId]);
+    if (pedidoRes.rows.length === 0) return res.status(404).json({error: 'Pedido não encontrado.'});
+    const {empresa_id, cliente_nome} = pedidoRes.rows[0];
+    const clienteSlug = (cliente_nome || 'sem-cliente').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+
+    const key = `${empresa_id}/${clienteSlug}/${pedidoId}/${crypto.randomUUID()}.${ext || 'jpg'}`;
+    const command = new PutObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key,
+      ContentType: contentType || 'image/jpeg',
+    });
+
+    const uploadUrl = await getSignedUrl(r2, command, { expiresIn: 300 });
+    const publicUrl = `${R2_PUBLIC_URL}/${key}`;
+
+    // Já salva a referência no DB (foto aparece quando upload concluir)
+    await pool.query(
+      'INSERT INTO pedido_fotos (pedido_id, url, etapa) VALUES ($1, $2, $3)',
+      [pedidoId, publicUrl, etapa || 'geral']
+    );
+
+    res.json({ success: true, uploadUrl, publicUrl });
+  } catch (err: any) {
+    console.error('Erro ao gerar URL de upload:', err);
+    res.status(500).json({error: 'Erro ao gerar URL.'});
+  }
+});
+
+// Upload de foto do pedido (fallback - mantém compatibilidade)
 app.post('/api/pedidos/:pedidoId/fotos', upload.single('foto'), async (req, res) => {
   try {
     const {pedidoId} = req.params;
@@ -869,9 +953,8 @@ app.post('/api/pedidos/:pedidoId/fotos', upload.single('foto'), async (req, res)
     const file = req.file;
     if (!file) return res.status(400).json({error: 'Nenhuma foto enviada.'});
 
-    // Busca empresa_id e cliente_nome do pedido para organizar no R2
     const pedidoRes = await pool.query('SELECT empresa_id, cliente_nome FROM pedidos WHERE id=$1', [pedidoId]);
-    if (pedidoRes.rows.length === 0) return res.status(404).json({error: 'Pedido n\u00e3o encontrado.'});
+    if (pedidoRes.rows.length === 0) return res.status(404).json({error: 'Pedido não encontrado.'});
     const {empresa_id, cliente_nome} = pedidoRes.rows[0];
     const clienteSlug = (cliente_nome || 'sem-cliente').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
 
@@ -1058,5 +1141,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`API rodando em http://0.0.0.0:${PORT}`);
+  console.log(`[Worker ${process.pid}] API rodando em http://0.0.0.0:${PORT}`);
 });
+
+} // end startServer()
